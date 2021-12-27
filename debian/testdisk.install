@@ -1,0 +1,6 @@
+/usr/bin/fidentify
+/usr/bin/photorec
+/usr/bin/qphotorec
+/usr/bin/testdisk
+/usr/share/icons/*
+debian/org.kaisen.testdisk.policy usr/share/polkit-1/actions/

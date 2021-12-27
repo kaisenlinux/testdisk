@@ -1,0 +1,107 @@
+Source: testdisk
+Section: admin
+Priority: optional
+XSBC-Original-Maintainer: Jean-Michel Kelbert <kelbert@debian.org>
+Maintainer: Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>
+Build-Depends: debhelper (>= 13),
+	       dh-autoreconf,
+	       build-essential,
+	       libext2fs-dev,
+	       libncurses5-dev,
+	       libncursesw5-dev,
+	       ntfs-3g-dev,
+	       libjpeg-dev,
+	       uuid-dev,
+	       zlib1g-dev,
+	       qtbase5-dev,
+	       qttools5-dev-tools,
+	       pkg-config,
+	       git,
+Standards-Version: 4.6.0
+Homepage: https://www.cgsecurity.org/
+Vcs-Browser: https://gitlab.com/kaisenlinux/packages/testdisk
+Vcs-Git: https://gitlab.com/kaisenlinux/packages/testdisk.git
+
+Package: testdisk
+Architecture: any
+Depends: ${shlibs:Depends},
+	 ${misc:Depends},
+	 libext2fs2,
+	 libncurses5,
+	 libncursesw5,
+	 ntfs-3g,
+	 libjpeg-tools,
+	 uuid,
+	 zlib1g,
+Description: Partition scanner and disk recovery tool, PhotoRec and qPhotoRec file recovery tools
+ TestDisk checks the partition and boot sectors of your disks.
+ It is very useful in forensics, recovering lost partitions.
+ It works with :
+  * DOS/Windows FAT12, FAT16 and FAT32
+  * NTFS ( Windows NT/2K/XP )
+  * Linux Ext2 and Ext3
+  * BeFS ( BeOS )
+  * BSD disklabel ( FreeBSD/OpenBSD/NetBSD )
+  * CramFS (Compressed File System)
+  * HFS and HFS+, Hierarchical File System
+  * JFS, IBM's Journaled File System
+  * Linux Raid
+  * Linux Swap (versions 1 and 2)
+  * LVM and LVM2, Linux Logical Volume Manager
+  * Netware NSS
+  * ReiserFS 3.5 and 3.6
+  * Sun Solaris i386 disklabel
+  * UFS and UFS2 (Sun/BSD/...)
+  * XFS, SGI's Journaled File System
+ .
+ PhotoRec is file data recovery software designed to recover
+ lost pictures from digital camera memory or even Hard Disks.
+ It has been extended to search also for non audio/video headers.
+ It searches for following files and is able to undelete them:
+  * Sun/NeXT audio data (.au)
+  * RIFF audio/video (.avi/.wav)
+  * BMP bitmap (.bmp)
+  * bzip2 compressed data (.bz2)
+  * Source code written in C (.c)
+  * Canon Raw picture (.crw)
+  * Canon catalog (.ctg)
+  * FAT subdirectory
+  * Microsoft Office Document (.doc)
+  * Nikon dsc (.dsc)
+  * HTML page (.html)
+  * JPEG picture (.jpg)
+  * MOV video (.mov)
+  * MP3 audio (MPEG ADTS, layer III, v1) (.mp3)
+  * Moving Picture Experts Group video (.mpg)
+  * Minolta Raw picture (.mrw)
+  * Olympus Raw Format picture (.orf)
+  * Portable Document Format (.pdf)
+  * Perl script (.pl)
+  * Portable Network Graphics (.png)
+  * Raw Fujifilm picture (.raf)
+  * Contax picture (.raw)
+  * Rollei picture (.rdc)
+  * Rich Text Format (.rtf)
+  * Shell script (.sh)
+  * Tar archive (.tar )
+  * Tag Image File Format (.tiff)
+  * Microsoft ASF (.wma)
+  * Sigma/Foveon X3 raw picture (.x3f)
+  * zip archive (.zip)
+
+Package: testdisk-dbg
+Section: debug
+Priority: optional
+Architecture: any
+Depends: testdisk (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Suggests: libc6-dbg, e2fslibs-dbg, libcomerr2-dbg, libjpeg-dbg,
+ libncursesw5-dbg, libssl0.9.8-dbg, zlib1g-dbg
+Description: Partition scanner and disk recovery tool, and PhotoRec file recovery tool
+ TestDisk checks the partition and boot sectors of your disks.
+ It is very useful in forensics, recovering lost partitions.
+ .
+ PhotoRec is file data recovery software designed to recover
+ lost pictures from digital camera memory or even Hard Disks.
+ It has been extended to search also for non audio/video headers.
+ .
+ This package includes the debugging symbols.

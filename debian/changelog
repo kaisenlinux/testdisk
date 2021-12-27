@@ -1,0 +1,281 @@
+testdisk (7.1-6kaisen) kaisen-packages; urgency=medium
+
+  * Rebuild to add qphotorec binary
+  * Enabling more configuration script options
+  * Add new dependancies for testdisk packages for photorec and qphotorec tools
+
+ -- Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>  Mon, 27 Dec 2021 00:52:48 +0100
+
+testdisk (7.1-5) unstable; urgency=medium
+
+  * Re-upload with the correct patch to build on kfreebsd-*
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Wed, 21 Aug 2019 22:24:34 +0200
+
+testdisk (7.1-4) unstable; urgency=medium
+
+  * Re-upload with an hirher version. 
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Tue, 20 Aug 2019 22:21:52 +0200
+
+testdisk (7.1-3) unstable; urgency=medium
+
+  * Update patch to build on kfreebsd-amd64 and kfreebsd-i386 
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Sun, 18 Aug 2019 10:41:59 +0200
+
+testdisk (7.1-2) unstable; urgency=medium
+
+  * Add a patch to build on kfreebsd-amd64 and kfreebsd-i386
+  * Modifiy build dependancy to allow build on hurd-i386
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Sun, 11 Aug 2019 16:18:55 +0200
+
+testdisk (7.1-1) unstable; urgency=medium
+
+  * New upstream release
+  * Remove patches which are no more needed since provided upstream.
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Mon, 05 Aug 2019 21:30:03 +0200
+
+testdisk (7.0-3) unstable; urgency=medium
+
+  * Apply patch to build on mips (Closes: #847757)
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Tue, 10 Jan 2017 22:03:06 +0100
+
+testdisk (7.0-2) unstable; urgency=medium
+
+  * Remove README.Debian
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Sun, 13 Nov 2016 22:30:44 +0100
+
+testdisk (7.0-1) unstable; urgency=medium
+
+  * New upstream release (Closes: #793943)
+  * Added patch to support reproducible builds  (Closes: #787455, #798776)
+  * debian/control: Standards-Version: 3.9.6
+
+ -- Roland Stigge <stigge@antcom.de>  Mon, 25 Jan 2016 15:11:23 +0100
+
+testdisk (6.14-3) unstable; urgency=medium
+
+  * debian/control:
+    - Mentioning forensics and photorec in Description (Closes: #738467)
+    - Depend on ntfs-3g, rebuilding (Closes: #734244)
+    - Standards-Version: 3.9.5
+
+ -- Roland Stigge <stigge@antcom.de>  Sat, 12 Apr 2014 10:07:31 +0200
+
+testdisk (6.14-2) unstable; urgency=low
+
+  * debian/control:
+    - Build against ntfs-3g-dev rather than deprecated libntfs-dev
+      thanks to Artur Rona <ari-tczew@tlen.pl> (Closes: #723151)
+  * Updated debian/watch
+
+ -- Roland Stigge <stigge@antcom.de>  Thu, 17 Oct 2013 14:53:09 +0200
+
+testdisk (6.14-1) unstable; urgency=low
+
+  * New upstream release (Closes: #651756)
+  * debian/control:
+    - Standards-Version: 3.9.4
+    - Fixed paragraph separator (Closes: #674038)
+
+ -- Roland Stigge <stigge@antcom.de>  Fri, 02 Aug 2013 21:15:47 +0200
+
+testdisk (6.13-1) unstable; urgency=low
+
+  * New upstream release, thanks to Philippe Coval (Closes: #630255)
+    - Fixes segfault bug (Closes: #513724)
+    - Removed doc/* upstream in favor of online documentation
+      (Closes: #629209)
+  * New co-maintainer
+  * debian/control:
+    - Standards-Version: 3.9.2
+    - Build-Depends: libjpeg-dev (Closes: #644966)
+    - Add debug symbols package testdisk-dbg
+  * debian/rules: New dh style rules
+  * debian/compat: 8
+  * debian/source/format: 3.0 (quilt)
+  * debian/copyright: GPL-2 reference
+
+ -- Roland Stigge <stigge@antcom.de>  Mon, 16 Jan 2012 21:18:55 +0100
+
+testdisk (6.12-1) unstable; urgency=low
+
+  * New upstream release
+  * debian/rules: dyn version
+  * debian/watch: add
+
+ -- Philippe Coval <rzr@gna.org>  Thu, 16 Jun 2011 14:53:10 +0200
+
+testdisk (6.11-2) unstable; urgency=low
+
+  * Add the word "undelete" in the long description.
+  (closes: 587804)
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Wed, 15 Sep 2010 22:29:13 +0200
+
+testdisk (6.11-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Tue, 16 Jun 2009 22:00:25 +0200
+
+testdisk (6.10-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Sun, 17 Aug 2008 13:31:48 +0200
+
+testdisk (6.9-1.1) unstable; urgency=low
+
+  * Non-maintainer upload.
+  * Pass --with-ncurses-includes to fix FTBFS (Closes: #475708)
+    patch from Laurent Bigonville
+
+ -- Colin Tuckley <colint@debian.org>  Fri, 23 May 2008 08:45:09 +0100
+
+testdisk (6.9-1) unstable; urgency=low
+
+  * New upstream release
+  * Enable sudo support
+  * Enable UUID support
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Sat, 12 Apr 2008 13:47:12 +0200
+
+testdisk (6.8-1) unstable; urgency=low
+
+  * New upstream release
+  (closes: #439610, #456884, #395419)
+  * Remove README.Debian
+  (closes: #421746)
+  * Add reiserfs support
+  (closes: #281553)
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Mon, 26 Dec 2007 00:22:29 +0100
+
+testdisk (6.6-1) unstable; urgency=low
+
+  * New upstream release
+  (closes: #395256)
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Sat,  5 May 2007 11:44:27 +0200
+
+testdisk (6.5-1) unstable; urgency=low
+
+  * New upstream release
+  * Display description verbatim.
+  (closes: #334557)
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Wed, 25 Oct 2006 20:04:05 +0200
+
+testdisk (6.4.1-1) unstable; urgency=low
+
+  * New upstream release
+  (closes: #351593)
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Fri, 23 Jun 2006 22:01:45 +0200
+
+testdisk (6.3-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Tue, 21 Mar 2006 22:19:51 +0100
+
+testdisk (6.1-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Sun, 16 Oct 2005 18:01:29 +0200
+
+testdisk (5.8-3) unstable; urgency=low
+
+  * Put the copy of /usr/share/misc/{config.guess, config.sub} in debian/rules
+    into comments.
+  * Depend on libntfs-dev (>= 1.11.2-3).
+  (closes: #323762, #322577)
+  * Update description.
+  * Update to Standards-Version 3.6.2
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Sun, 11 Sep 2005 19:45:27 +0200
+
+testdisk (5.8-2) unstable; urgency=low
+
+  *  Add libjpeg62-dev to Build-Depends.
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Wed, 10 Aug 2005 16:36:26 +0200
+
+testdisk (5.8-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Sat, 18 Jun 2005 09:35:26 +0200
+
+testdisk (5.5-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Sun, 14 Nov 2004 01:47:09 +0100
+
+testdisk (5.2-7) unstable; urgency=high
+
+  * Remove libreiserfs0.3-dev from Build-Depends.
+  (closes: #272780)
+  * Add a README.Debian to explain why reiserfs isn't supported anymore.
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Thu, 23 Sep 2004 21:15:29 +0200
+
+testdisk (5.2-6) unstable; urgency=low
+
+  * Apply a new patch provided by upstream to compile on Alpha.
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Tue, 30 Mar 2004 23:10:35 +0200
+
+testdisk (5.2-5) unstable; urgency=low
+
+  * Apply a patch provided by upstream to compile on Alpha.
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Mon, 29 Mar 2004 22:53:25 +0200
+
+testdisk (5.2-4) unstable; urgency=low
+
+  * Lauch autoheader and autoconf to take modifications provided by upstream
+    into account.
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Thu, 25 Mar 2004 23:30:02 +0100
+
+testdisk (5.2-3) unstable; urgency=low
+
+  * Apply modifications provided by upstream.
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Sat, 20 Mar 2004 11:44:48 +0100
+
+testdisk (5.2-2) unstable; urgency=low
+
+  * Add requirements version for some packages in Build-Depends.
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Wed, 17 Mar 2004 17:26:18 +0100
+
+testdisk (5.2-1) unstable; urgency=low
+
+  * New upstream release
+  (Closes: #213156)
+  * I'm the new maintainer. Thanks to Fabian Franz to package testdisk before
+    me.
+
+ -- Jean-Michel Kelbert <kelbert@debian.org>  Mon, 15 Mar 2004 22:01:04 +0100
+
+testdisk (4.2-1) unstable; urgency=low
+
+  * Initial upload. Closes: #201600
+
+ -- Fabian Franz <debian@fabian-franz.de>  Thu, 17 Jul 2003 18:13:24 +0200
+
+testdisk (4.0-1) unstable; urgency=low
+
+  * Initial Release.
+
+ -- Fabian Franz <debian@fabian-franz.de>  Sat,  6 Apr 2002 00:03:55 +0200

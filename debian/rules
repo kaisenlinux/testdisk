@@ -1,0 +1,22 @@
+#!/usr/bin/make -f
+
+DPKG_EXPORT_BUILDFLAGS = 1
+include /usr/share/dpkg/buildflags.mk
+
+%:
+	dh $@ --with autoreconf
+
+override_dh_auto_configure:
+	dh_auto_configure -- --enable-qt --prefix=/usr --without-ewf --with-ext2fs --with-iconv --with-jpeg --with-ncurses --with-uuid --with-zlib --enable-dfxml --enable-sudo --with-sudo-bin=/usr/bin/sudo --with-ncurses-includes=/usr/include/ncursesw
+
+override_dh_auto_install:
+	dh_auto_install
+	rm -rf $(CURDIR)/debian/tmp/usr/share/doc/
+	rm -rf $(CURDIR)/debian/tmp/usr/share/applications/
+
+override_dh_auto_clean:
+	dh_auto_clean
+	-rm -f src/*.d
+
+override_dh_strip:
+	dh_strip --dbg-package=testdisk-dbg
