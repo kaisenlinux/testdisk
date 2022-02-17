@@ -1,3 +1,9 @@
+testdisk (7.1-7kaisen) kaisen-packages; urgency=medium
+
+  * Add testdisk logo
+
+ -- Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>  Thu, 17 Feb 2021 15:50:19 +0100
+
 testdisk (7.1-6kaisen) kaisen-packages; urgency=medium
 
   * Rebuild to add qphotorec binary

@@ -4,3 +4,4 @@
 /usr/bin/testdisk
 /usr/share/icons/*
 debian/org.kaisen.testdisk.policy usr/share/polkit-1/actions/
+debian/testdisk.png usr/share/pixmaps/
