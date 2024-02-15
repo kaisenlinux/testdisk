@@ -1,3 +1,9 @@
+testdisk (7.1-8kaisen) kaisen-packages; urgency=medium
+
+  * Update dependancies (ncurses)
+
+ -- Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>  Wed, 14 Feb 2024 05:38:31 +0100
+
 testdisk (7.1-7kaisen) kaisen-packages; urgency=medium
 
   * Add testdisk logo
