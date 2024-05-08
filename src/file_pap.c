@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_pap)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,6 +32,7 @@
 #include "filegen.h"
 
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_pap(file_stat_t *file_stat);
 
 const file_hint_t file_hint_pap= {
@@ -42,6 +44,12 @@ const file_hint_t file_hint_pap= {
   .register_header_check=&register_header_check_pap
 };
 
+/*@
+  @ requires separation: \separated(&file_hint_pap, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_pap(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   reset_file_recovery(file_recovery_new);
@@ -54,3 +62,4 @@ static void register_header_check_pap(file_stat_t *file_stat)
   static const unsigned char pap_header[]  = {'P','A','P','1'};
   register_header_check(0, pap_header,sizeof(pap_header), &header_check_pap, file_stat);
 }
+#endif

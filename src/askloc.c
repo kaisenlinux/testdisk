@@ -22,7 +22,11 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
- 
+
+#ifdef DISABLED_FOR_FRAMAC
+#undef HAVE_GETCWD
+#endif
+
 #include <stdio.h>
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
@@ -59,15 +63,22 @@
 #include "askloc.h"
 #include "log.h"
 
-static char *td_getcwd(char *buf, unsigned long size)
+char *td_getcwd(char *buf, unsigned long size)
 {
   /* buf must non-NULL*/
 #ifdef HAVE_GETCWD
   if(getcwd(buf, size)!=NULL)
+  {
+    /*@ assert valid_string(buf); */
     return buf;
-#endif
+  }
+  buf[0]='/';
+  buf[1]='\0';
+#else
   buf[0]='.';
   buf[1]='\0';
+#endif
+  /*@ assert valid_string(buf); */
   return buf;
 }
 
@@ -160,20 +171,13 @@ static void set_parent_directory(char *dst_directory)
 #endif
 }
 
-char *ask_location(const char*msg, const char *src_dir, const char *dst_org)
+void ask_location(char *dst_directory, const unsigned int dst_size, const char *msg, const char *src_dir)
 {
-  char dst_directory[4096];
-  char *res=NULL;
   int quit;
   WINDOW *window=newwin(LINES, COLS, 0, 0);	/* full screen */
   aff_copy_short(window);
-  if(dst_org != NULL)
-  {
-    strncpy(dst_directory, dst_org, sizeof(dst_directory));
-    dst_directory[sizeof(dst_directory)-1]='\0';
-  }
-  else
-    td_getcwd(dst_directory, sizeof(dst_directory));
+  if(dst_directory[0]== '\0')
+    td_getcwd(dst_directory, dst_size);
   do
   {
     DIR* dir;
@@ -201,12 +205,12 @@ char *ask_location(const char*msg, const char *src_dir, const char *dst_org)
     if(dir==NULL)
     {
       log_info("opendir(%s) failed\n", dst_directory);
-      strncpy(dst_directory, SPATH_SEP, sizeof(dst_directory));
+      strncpy(dst_directory, SPATH_SEP, dst_size);
       dir=opendir(dst_directory);
     }
     if(dir==NULL)
     {
-      td_getcwd(dst_directory, sizeof(dst_directory));
+      td_getcwd(dst_directory, dst_size);
       dir=opendir(dst_directory);
     }
     if(dir==NULL)
@@ -216,7 +220,8 @@ char *ask_location(const char*msg, const char *src_dir, const char *dst_org)
 #ifdef HAVE_TOUCHWIN
       touchwin(stdscr);
 #endif
-      return NULL;
+      dst_directory[0]='\0';
+      return ;
     }
     {
       file_info_t *file_info;
@@ -406,42 +411,6 @@ char *ask_location(const char*msg, const char *src_dir, const char *dst_org)
         {
 	  const int command=wgetch(window);
           quit=ASK_LOCATION_WAITKEY;
-#if defined(KEY_MOUSE) && defined(ENABLE_MOUSE)
-	  if(command==KEY_MOUSE)
-	  {
-	    MEVENT event;
-	    if(getmouse(&event) == OK)
-	    {	/* When the user clicks left mouse button */
-	      if((event.bstate & BUTTON1_CLICKED) || (event.bstate & BUTTON1_DOUBLE_CLICKED))
-	      {
-		if(event.y => line_base - 1 && event.y < old_LINES)
-		{
-		  const int pos_num_old=pos_num;
-		  /* Disk selection */
-		  while(pos_num > event.y - (line_base - offset) && current_file->prev!=&dir_list.list)
-		  {
-		    current_file=current_file->prev;
-		    pos_num--;
-		  }
-		  while(pos_num < event.y - (line_base - offset) && current_file->next!=&dir_list.list)
-		  {
-		    current_file=current_file->next;
-		    pos_num++;
-		  }
-		  quit=ASK_LOCATION_UPDATE;
-		  if(((event.bstate & BUTTON1_CLICKED) && pos_num==pos_num_old) ||
-		      (event.bstate & BUTTON1_DOUBLE_CLICKED))
-		    command=KEY_ENTER;
-		}
-#if 0
-		else if(file_walker!=&dir_list.list && file_walker->next!=&dir_list.list)
-		{
-		}
-#endif
-	      }
-	    }
-	  }
-#endif
           switch(command)
           {
             case 'y':
@@ -450,7 +419,6 @@ char *ask_location(const char*msg, const char *src_dir, const char *dst_org)
             case 'C':
               if(dst_directory_ok>0)
               {
-                res=strdup(dst_directory);
                 quit=ASK_LOCATION_QUIT;
               }
               break;
@@ -458,7 +426,7 @@ char *ask_location(const char*msg, const char *src_dir, const char *dst_org)
             case 'N':
 	    case 'q':
 	    case 'Q':
-              res=NULL;
+	      dst_directory[0]='\0';
               quit=ASK_LOCATION_QUIT;
               break;
             case KEY_UP:
@@ -528,7 +496,7 @@ char *ask_location(const char*msg, const char *src_dir, const char *dst_org)
 		    set_parent_directory(dst_directory);
 		    quit=ASK_LOCATION_NEWDIR;
 		  }
-		  else if(strlen(dst_directory) + 1 + strlen(file_info->name) + 1 <= sizeof(dst_directory))
+		  else if(strlen(dst_directory) + 1 + strlen(file_info->name) + 1 <= dst_size)
 		  {
 #if defined(DJGPP) || defined(__OS2__)
 		    if(dst_directory[0]!='\0'&&dst_directory[1]!='\0'&&dst_directory[2]!='\0'&&dst_directory[3]!='\0')
@@ -566,7 +534,6 @@ char *ask_location(const char*msg, const char *src_dir, const char *dst_org)
 #ifdef HAVE_TOUCHWIN
   touchwin(stdscr);
 #endif
-  return res;
 }
 
 static void dir_aff_entry(WINDOW *window, file_info_t *file_info)
@@ -592,4 +559,3 @@ static int aff_txt(const int line, WINDOW *window, const char *_format, ...)
   return next_line;
 }
 #endif
-

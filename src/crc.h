@@ -20,6 +20,8 @@
 
  */
 
+#ifndef _CRC_H
+#define _CRC_H
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -28,8 +30,15 @@ extern "C" {
 uint32_t* make_crc32_table(uint32_t poly);
 unsigned int get_crc32_gen(const unsigned char *s, const unsigned int len, const uint32_t seed, const uint32_t *crctab);
 #endif
+/*@
+  @ requires \valid_read((const char *)s + (0 .. len-1));
+  @ requires \initialized((const char *)s + (0 .. len-1));
+  @ terminates \true;
+  @ assigns \nothing;
+  @*/
 unsigned int get_crc32(const void *s, const unsigned int len, const uint32_t seed);
 
 #ifdef __cplusplus
 } /* closing brace for extern "C" */
+#endif
 #endif

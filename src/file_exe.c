@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_exe)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -35,10 +36,12 @@
 #include "filegen.h"
 #include "pe.h"
 #include "log.h"
+#if defined(__FRAMAC__)
+#include "__fc_builtin.h"
+#endif
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_exe(file_stat_t *file_stat);
-static int header_check_exe(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
-static void file_rename_pe_exe(file_recovery_t *file_recovery);
 
 const file_hint_t file_hint_exe= {
   .extension="exe",
@@ -49,163 +52,8 @@ const file_hint_t file_hint_exe= {
   .register_header_check=&register_header_check_exe
 };
 
+static const char *extension_dll="dll";
 static const unsigned char exe_header[2]  = {'M','Z'};
-
-static void register_header_check_exe(file_stat_t *file_stat)
-{
-  register_header_check(0, exe_header,sizeof(exe_header), &header_check_exe, file_stat);
-}
-
-static int header_check_exe(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
-{
-  const struct dos_image_file_hdr *dos_hdr=(const struct dos_image_file_hdr*)buffer;
-  const struct pe_image_file_hdr *pe_hdr;
-  if(memcmp(buffer,exe_header,sizeof(exe_header))!=0)
-    return 0;
-  pe_hdr=(const struct pe_image_file_hdr *)(buffer+le32(dos_hdr->e_lfanew));
-  if(le32(dos_hdr->e_lfanew)>0 &&
-      le32(dos_hdr->e_lfanew) <= buffer_size-sizeof(struct pe_image_file_hdr) &&
-      (le32(pe_hdr->Magic) & 0xffff) == IMAGE_WIN16_SIGNATURE)
-  {
-    /* NE Win16 */
-    reset_file_recovery(file_recovery_new);
-    file_recovery_new->extension=file_hint_exe.extension;
-    return 1;
-  }
-  if(le32(dos_hdr->e_lfanew)>0 &&
-      le32(dos_hdr->e_lfanew) <= buffer_size-sizeof(struct pe_image_file_hdr) &&
-      (le32(pe_hdr->Magic) & 0xffff) == IMAGE_NT_SIGNATURE)
-  {
-    /* Windows PE */
-    if(le16(pe_hdr->Characteristics) & 0x2000)
-    {
-      /* Dynamic Link Library */
-      reset_file_recovery(file_recovery_new);
-      file_recovery_new->extension="dll";
-    }
-    else if(le16(pe_hdr->Characteristics) & 0x02)
-    {
-      reset_file_recovery(file_recovery_new);
-      file_recovery_new->extension=file_hint_exe.extension;
-    }
-    else
-    {
-#ifdef DEBUG_EXE
-      log_warning("EXE rejected, bad characteristics %02x\n", le16(pe_hdr->Characteristics));
-#endif
-      return 0;
-    }
-    file_recovery_new->time=le32(pe_hdr->TimeDateStamp);
-#ifdef DEBUG_EXE
-    {
-      const struct pe_image_optional_hdr32 *pe_image_optional32=(const struct pe_image_optional_hdr32 *)
-	(((const unsigned char*)pe_hdr + sizeof(struct pe_image_file_hdr)));
-      if(le16(pe_image_optional32->Magic)==IMAGE_NT_OPTIONAL_HDR_MAGIC)
-      {
-	log_debug("SizeOfCode %lx\n", (long unsigned)le32(pe_image_optional32->SizeOfCode));
-	log_debug("SizeOfImage %lx\n", (long unsigned)le32(pe_image_optional32->SizeOfImage));
-      }
-      else if(le16(pe_image_optional32->Magic)==IMAGE_NT_OPTIONAL_HDR64_MAGIC)
-      {
-	const struct pe_image_optional_hdr64 *pe_image_optional64=(const struct pe_image_optional_hdr64 *)
-	  (((const unsigned char*)pe_hdr + sizeof(struct pe_image_file_hdr)));
-      }
-      log_debug("PE image opt 0x%lx-0x%lx\n", (long unsigned)sizeof(struct pe_image_file_hdr),
-	  (long unsigned)(sizeof(struct pe_image_file_hdr) + le16(pe_hdr->SizeOfOptionalHeader) - 1));
-    }
-#endif
-    {
-      unsigned int i;
-      uint64_t sum=0;
-      const struct pe_image_section_hdr *pe_image_section=(const struct pe_image_section_hdr*)
-	((const unsigned char*)pe_hdr + sizeof(struct pe_image_file_hdr) + le16(pe_hdr->SizeOfOptionalHeader));
-      for(i=0;
-	  i<le16(pe_hdr->NumberOfSections) &&
-	  (const unsigned char*)(pe_image_section+1) <= buffer+buffer_size;
-	  i++,pe_image_section++)
-      {
-	if(le32(pe_image_section->SizeOfRawData)>0)
-	{
-#ifdef DEBUG_EXE
-	  log_debug("%s 0x%lx-0x%lx\n", pe_image_section->Name,
-	      (unsigned long)le32(pe_image_section->PointerToRawData),
-	      (unsigned long)le32(pe_image_section->PointerToRawData)+le32(pe_image_section->SizeOfRawData)-1);
-#endif
-	  if(le32(pe_image_section->SizeOfRawData)%32==0)
-	  {
-	    if(sum < le32(pe_image_section->PointerToRawData) + le32(pe_image_section->SizeOfRawData))
-	      sum=le32(pe_image_section->PointerToRawData) + le32(pe_image_section->SizeOfRawData);
-	  }
-	}
-	if(le16(pe_image_section->NumberOfRelocations)>0)
-	{
-#ifdef DEBUG_EXE
-	  log_debug("relocations 0x%lx-0x%lx\n",
-	      (unsigned long)le32(pe_image_section->PointerToRelocations),
-	      (unsigned long)le32(pe_image_section->PointerToRelocations)+1*le16(pe_image_section->NumberOfRelocations)-1);
-#endif
-	  if(sum < le32(pe_image_section->PointerToRelocations)+ 1*le16(pe_image_section->NumberOfRelocations))
-	    sum = le32(pe_image_section->PointerToRelocations)+ 1*le16(pe_image_section->NumberOfRelocations);
-	}
-      }
-      if(le32(pe_hdr->NumberOfSymbols)>0)
-      {
-#ifdef DEBUG_EXE
-	log_debug("Symboles 0x%lx-0x%lx\n", (long unsigned)le32(pe_hdr->PointerToSymbolTable),
-	    (long unsigned)(le32(pe_hdr->PointerToSymbolTable)+ IMAGE_SIZEOF_SYMBOL*le32(pe_hdr->NumberOfSymbols))-1);
-#endif
-	if(le32(pe_hdr->NumberOfSymbols)<0x10000)
-	{
-	  if(sum < le32(pe_hdr->PointerToSymbolTable)+ IMAGE_SIZEOF_SYMBOL*le32(pe_hdr->NumberOfSymbols))
-	    sum = le32(pe_hdr->PointerToSymbolTable)+ IMAGE_SIZEOF_SYMBOL*le32(pe_hdr->NumberOfSymbols);
-	}
-      }
-      /* It's not perfect, EXE overlay are not recovered */
-      file_recovery_new->calculated_file_size=sum;
-    }
-    file_recovery_new->data_check=&data_check_size;
-    file_recovery_new->file_check=&file_check_size;
-    file_recovery_new->file_rename=&file_rename_pe_exe;
-    return 1;
-  }
-  if(le16(dos_hdr->bytes_in_last_block) <= 512 &&
-      le16(dos_hdr->blocks_in_file) > 0 &&
-      le16(dos_hdr->min_extra_paragraphs) <= le16(dos_hdr->max_extra_paragraphs)
-    )
-  {
-    /* MSDOS EXE */
-    uint64_t coff_offset=le16(dos_hdr->blocks_in_file)*512;
-    if(le16(dos_hdr->bytes_in_last_block))
-      coff_offset-=512-le16(dos_hdr->bytes_in_last_block);
-
-    if(coff_offset < buffer_size-1 &&
-	buffer[coff_offset]==0x4c && buffer[coff_offset+1]==0x01)
-    { /*  COFF_I386MAGIC */
-      reset_file_recovery(file_recovery_new);
-      file_recovery_new->extension=file_hint_exe.extension;
-      return 1;
-    }
-#ifdef DEBUG_EXE
-    {
-      unsigned int i;
-      const struct exe_reloc *exe_reloc;
-      log_info("Maybe a DOS EXE\n");
-      log_info("blocks %llu\n", (long long unsigned)coff_offset);
-      log_info("data start %llx\n", (long long unsigned)16*le16(dos_hdr->header_paragraphs));
-      log_info("reloc %u\n", le16(dos_hdr->num_relocs));
-      for(i=0, exe_reloc=(const struct exe_reloc *)(buffer+le16(dos_hdr->reloc_table_offset));
-	  i < le16(dos_hdr->num_relocs) &&
-	  le16(dos_hdr->reloc_table_offset)+ (i+1)*sizeof(struct exe_reloc) < buffer_size;
-	  i++, exe_reloc++)
-      {
-	log_info("offset %x, segment %x\n",
-	    le16(exe_reloc->offset), le16(exe_reloc->segment));
-      }
-    }
-#endif
-  }
-  return 0;
-}
 
 struct rsrc_entries_s
 {
@@ -213,11 +61,17 @@ struct rsrc_entries_s
   uint32_t Pos;
 } __attribute__ ((gcc_struct, __packed__));
 
+struct rsrc_offlen
+{
+  uint32_t off;
+  uint32_t len;
+} __attribute__ ((gcc_struct, __packed__));
+
 struct PE_index
 {
   uint16_t len;
   uint16_t val_len;
-  uint16_t type;
+  uint16_t type;	/* 0=binary data, 1=text*/
 } __attribute__ ((gcc_struct, __packed__));
 
 static char vs_version_info[32]={
@@ -241,276 +95,632 @@ static char InternalName[24]={
   'N', 0x0, 'a', 0x0, 'm', 0x0, 'e', 0x0
 };
 
-static unsigned int ReadUnicodeStr(const char *buffer, unsigned int pos, const unsigned int len)
+/*@
+  @ requires \valid(file_recovery);
+  @ requires valid_read_string((char*)&file_recovery->filename);
+  @ requires 4096 >= needle_len > 0;
+  @ requires end <= 0xffff;
+  @ requires \valid_read(buffer+(0..end-1));
+  @ requires \valid_read(needle+(0..needle_len-1));
+  @ requires \separated(file_recovery, buffer+(..), needle+(..));
+  @ ensures \result <= 0xffff;
+  @*/
+static int parse_String(file_recovery_t *file_recovery, const char*buffer, const unsigned int end, const char *needle, const unsigned int needle_len, const int force_ext)
 {
-  for(; pos+2<len && (buffer[pos]!='\0' || buffer[pos+1]!='\0'); pos+=2)
+  const struct PE_index *PE_index;
+  unsigned int len;
+  unsigned int val_len;
+  unsigned int type;
+  if(6 > end)
   {
-#ifdef DEBUG_EXE
-    log_info("%c", buffer[pos]);
-#endif
+    return -1;
   }
-  pos+=2;
-  if((pos & 0x03)!=0)
-    pos+=2;
-  return pos;
+  PE_index=(const struct PE_index*)buffer;
+  /*@ assert \valid_read(PE_index); */
+  len=le16(PE_index->len);
+  /*@ assert len <= 0xffff; */
+  val_len=le16(PE_index->val_len);
+  type=le16(PE_index->type);
+#ifdef DEBUG_EXE
+  log_info("parse_String len=%u val_len=%u type=%u\n", len, val_len, type);
+#endif
+  if(len > end)
+    return -1;
+  if(6 + 2 * val_len > len)
+    return -1;
+#ifdef DEBUG_EXE
+  dump_log(buffer, len);
+#endif
+//  type=1 => text
+  if(6+needle_len < end && type==1 && memcmp(&buffer[6], needle, needle_len)==0)
+  {
+    if(6 + needle_len + 2 * val_len > len)
+      return -1;
+    file_rename_unicode(file_recovery, buffer, end, 6+needle_len, NULL, force_ext);
+  }
+  return len;
 }
 
-static int PEVersion_aux(file_recovery_t *file_recovery, const char*buffer, const unsigned int end, const char *needle, const unsigned int needle_len, const int force_ext)
+/*@
+  @ requires \valid(file_recovery);
+  @ requires valid_read_string((char*)&file_recovery->filename);
+  @ requires 4096 >= needle_len > 0;
+  @ requires end <= 0xffff;
+  @ requires \valid_read(buffer+(0..end-1));
+  @ requires \valid_read(needle+(0..needle_len-1));
+  @ requires \separated(file_recovery, buffer+(..), needle+(..));
+  @*/
+static int parse_StringArray(file_recovery_t *file_recovery, const char*buffer, const unsigned int end, const char *needle, const unsigned int needle_len, const int force_ext)
 {
   unsigned int pos=0;
-  while(1)
+#ifdef DEBUG_EXE
+  log_info("parse_StringArray end=%u\n", end);
+#endif
+  /*@
+    @ loop invariant end <= 0xffff;
+    @ loop invariant pos <= 0x20000;
+    @ loop variant end - pos;
+    @*/
+  while(pos<end)
   {
-    const struct PE_index *PE_index;
-    pos=(pos + 3) & 0xfffffffc;  /* align on a 4-byte boundary */
-    if(pos + 6 > end)
-    {
+    const int res=parse_String(file_recovery, &buffer[pos], end - pos, needle, needle_len, force_ext);
+    if(res <= 0)
       return -1;
-    }
-    PE_index=(const struct PE_index*)&buffer[pos];
-    if(le16(PE_index->len)==0 && le16(PE_index->val_len)==0)
-    {
-      return -1;
-    }
-    {
-      const char *stringName=&buffer[pos+6];
-      if(pos + 6 + sizeof(vs_version_info) < end &&
-	  memcmp(stringName, vs_version_info, sizeof(vs_version_info))==0)
-      {
-	pos+=6+sizeof(vs_version_info);
-	if((pos & 0x03)!=0)
-	  pos+=2;
-	pos+=le16(PE_index->val_len);
-      }
-      else if(pos + 6 + sizeof(StringFileInfo) < end &&
-	  memcmp(stringName, StringFileInfo, sizeof(StringFileInfo))==0 &&
-	  le16(PE_index->val_len)==0)
-      {
-	unsigned int i;
-	unsigned int pt=pos+6+sizeof(StringFileInfo);
-	pos+=le16(PE_index->len);
-	for(i=0; pt + 6 < pos; i++)
-	{
-	  if(i==0)
-	  {
-	    pt=ReadUnicodeStr(buffer, pt+6, pos);
-	  }
-	  else
-	  {
-	    int do_rename=0;
-	    PE_index=(const struct PE_index*)&buffer[pt];
-	    if(pt+6+needle_len < end &&
-		memcmp(&buffer[pt+6], needle, needle_len)==0)
-	    {
-	      do_rename=1;
-	    }
-	    pt=ReadUnicodeStr(buffer, pt+6, pos);
-	    if(le16(PE_index->val_len)>0)
-	    {
-	      if(do_rename)
-	      {
-		file_rename_unicode(file_recovery, buffer, end, pt, NULL, force_ext);
-		return 0;
-	      }
-#ifdef DEBUG_EXE
-	      log_info(": ");
-#endif
-	      pt=ReadUnicodeStr(buffer, pt, pos);
-	    }
-	  }
-#ifdef DEBUG_EXE
-	  log_info("\n");
-#endif
-	}
-      }
-      else
-      {
-	pos+=le16(PE_index->len)+le16(PE_index->val_len);
-      }
-    }
+    /*@ assert 0xffff >= res > 0; */
+    pos+=res;
+    /* Padding */
+    if((pos & 0x03)!=0)
+      pos+=2;
   }
+  return 0;
 }
 
+/*@
+  @ requires \valid(file_recovery);
+  @ requires valid_read_string((char*)&file_recovery->filename);
+  @ requires 4096 >= needle_len > 0;
+  @ requires \valid_read(buffer+(0..end-1));
+  @ requires \valid_read(needle+(0..needle_len-1));
+  @ requires \separated(file_recovery, buffer+(..), needle+(..));
+  @*/
+static int parse_StringTable(file_recovery_t *file_recovery, const char*buffer, const unsigned int end, const char *needle, const unsigned int needle_len, const int force_ext)
+{
+  const struct PE_index *PE_index;
+  unsigned int pos;
+  unsigned int len;
+#ifdef DEBUG_EXE
+  unsigned int val_len;
+#endif
+  if(6 > end)
+  {
+    return -1;
+  }
+  PE_index=(const struct PE_index*)buffer;
+  /*@ assert \valid_read(PE_index); */
+  len=le16(PE_index->len);
+#ifdef DEBUG_EXE
+  val_len=le16(PE_index->val_len);
+  log_info("parse_StringTable len=%u val_len=%u type=%u\n", len, val_len, le16(PE_index->type));
+#endif
+  if(len > end)
+    return -1;
+  /* szKey: language identifier + code page */
+  /* No need to add padding, pos&0x03 == 0 */
+  pos = 6 + 2*8 + 2;
+  if(pos > len)
+    return -1;
+  /* An array of one or more String structures */
+  return parse_StringArray(file_recovery, &buffer[pos], len - pos, needle, needle_len, force_ext);
+}
+
+/*@
+  @ requires \valid(file_recovery);
+  @ requires valid_read_string((char*)&file_recovery->filename);
+  @ requires 4096 >= needle_len > 0;
+  @ requires \valid_read(buffer+(0..end-1));
+  @ requires \valid_read(needle+(0..needle_len-1));
+  @ requires \separated(file_recovery, buffer+(..), needle+(..));
+  @*/
+static int parse_StringFileInfo(file_recovery_t *file_recovery, const char*buffer, const unsigned int end, const char *needle, const unsigned int needle_len, const int force_ext)
+{
+  /* https://docs.microsoft.com/en-us/windows/win32/menurc/stringfileinfo */
+  const struct PE_index *PE_index;
+  unsigned int pos;
+  unsigned int len;
+  unsigned int val_len;
+  if(6 > end)
+  {
+    return -1;
+  }
+  PE_index=(const struct PE_index*)buffer;
+  /*@ assert \valid_read(PE_index); */
+  len=le16(PE_index->len);
+  val_len=le16(PE_index->val_len);
+#ifdef DEBUG_EXE
+  log_info("parse_StringFileInfo len=%u val_len=%u type=%u\n", len, val_len, le16(PE_index->type));
+#endif
+  if(len > end)
+    return -1;
+  if(6 + sizeof(StringFileInfo) > end)
+    return 0;
+  /* szKey == StringFileInfo ? */
+  if(memcmp(&buffer[6], StringFileInfo, sizeof(StringFileInfo))!=0)
+    return 0;
+  if(val_len!=0)
+    return -1;
+  /* No need to add padding, pos&0x03 == 0 */
+  pos=6 + sizeof(StringFileInfo);
+  if(pos > len)
+    return -1;
+  return parse_StringTable(file_recovery, &buffer[pos], len - pos, needle, needle_len, force_ext);
+}
+
+/*@
+  @ requires \valid(file_recovery);
+  @ requires valid_read_string((char*)&file_recovery->filename);
+  @ requires end > 0;
+  @ requires 4096 >= needle_len > 0;
+  @ requires \valid_read(buffer+(0..end-1));
+  @ requires \valid_read(needle+(0..needle_len-1));
+  @ requires \separated(vs_version_info+(..), file_recovery, buffer+(..), needle+(..));
+  @ behavior types: requires \separated(vs_version_info+(..), \union(file_recovery, buffer+(..), needle+(..)));
+  @*/
+static int parse_VS_VERSIONINFO(file_recovery_t *file_recovery, const char*buffer, const unsigned int end, const char *needle, const unsigned int needle_len, const int force_ext)
+{
+  /* https://docs.microsoft.com/en-us/windows/win32/menurc/vs-versioninfo */
+  unsigned int pos=0;
+  const struct PE_index *PE_index;
+  const char *stringName;
+  unsigned int len;
+  unsigned int val_len;
+  if(6 > end)
+  {
+    return -1;
+  }
+  PE_index=(const struct PE_index*)buffer;
+  /*@ assert \valid_read(PE_index); */
+  len=le16(PE_index->len);
+  val_len=le16(PE_index->val_len);
+#ifdef DEBUG_EXE
+  log_info("parse_VS_VERSIONINFO len=%u val_len=%u type=%u\n", len, val_len, le16(PE_index->type));
+#endif
+  if(len==0 && val_len==0)
+  {
+    return -1;
+  }
+  if(val_len > len)
+    return -1;
+  if(len > end)
+    return -1;
+  /*@ assert len <= end; */
+  pos+=6;
+  if(pos + sizeof(vs_version_info) >= len)
+    return -1;
+  stringName=&buffer[pos];
+  /* szKey */
+  if(memcmp(stringName, vs_version_info, sizeof(vs_version_info))!=0)
+    return -1;
+  pos+=sizeof(vs_version_info);
+  /* Padding1 */
+  if((pos & 0x03)!=0)
+    pos+=2;
+  /* VS_FIXEDFILEINFO */
+  pos+=val_len;
+  /* Padding2 */
+  if((pos & 0x03)!=0)
+    pos+=2;
+  if(pos > len)
+    return -1;
+  /* Children */
+  /* An array of zero or one StringFileInfo structures, and zero or one
+   * VarFileInfo structures that are children of the current VS_VERSIONINFO structure. */
+  if(parse_StringFileInfo(file_recovery, &buffer[pos], len - pos, needle, needle_len, force_ext) < 0)
+    return -1;
+  return 0;
+}
+
+/*@
+  @ requires \valid(file);
+  @ requires \valid(file_recovery);
+  @ requires valid_read_string((char*)&file_recovery->filename);
+  @*/
 static void PEVersion(FILE *file, const unsigned int offset, const unsigned int length, file_recovery_t *file_recovery)
 {
-  char *buffer;
+  char buffer[1024*1024];
+#ifdef DEBUG_EXE
+  log_info("PEVersion(file, %u, %u, file_recovery)\n", offset, length);
+#endif
   if(length==0 || length > 1024*1024)
     return;
   if(fseek(file, offset, SEEK_SET)<0)
     return ;
-  buffer=(char*)MALLOC(length);
-  if(fread(buffer, length, 1, file) != 1)
+  if(fread(&buffer, length, 1, file) != 1)
   {
-    free(buffer);
     return ;
   }
-  if(PEVersion_aux(file_recovery, buffer, length, OriginalFilename, sizeof(OriginalFilename), 0)==0)
+#if defined(__FRAMAC__)
+  Frama_C_make_unknown((char *)&buffer, sizeof(buffer));
+#endif
+  if(parse_VS_VERSIONINFO(file_recovery, (const char *)&buffer, length, OriginalFilename, sizeof(OriginalFilename), 0)==0)
   {
-    free(buffer);
     return;
   }
-  PEVersion_aux(file_recovery, buffer, length, InternalName, sizeof(InternalName), 1);
-  free(buffer);
+  parse_VS_VERSIONINFO(file_recovery, buffer, length, InternalName, sizeof(InternalName), 1);
 }
 
-static void file_exe_ressource(FILE *file, const unsigned int base, const unsigned int dir_start, const unsigned int size, const unsigned int rsrcType, const unsigned int level, const struct pe_image_section_hdr *pe_sections, unsigned int nbr_sections, file_recovery_t *file_recovery)
+/*@
+  @ requires \valid(file);
+  @ requires base <= 0x7fffffff;
+  @ requires \valid_read(pe_sections);
+  @ requires \valid(file_recovery);
+  @ requires valid_read_string((char*)&file_recovery->filename);
+  @ requires \valid_read(rsrc_entry);
+  @*/
+static int pe_resource_language_aux(FILE *file, const unsigned int base, const struct pe_image_section_hdr *pe_sections, const unsigned int nbr_sections, file_recovery_t *file_recovery, const struct rsrc_entries_s *rsrc_entry)
+{
+  struct rsrc_offlen buffer;
+  uint32_t off;
+  unsigned int len;
+  unsigned int j;
+#ifdef DEBUG_EXE
+  log_info("resource lang=%u, %x, offset %u\n",
+      le32(rsrc_entry->Type),
+      le32(rsrc_entry->Pos),
+      base + (le32(rsrc_entry->Pos) & 0x7fffffff));
+#endif
+  if(fseek(file, base + (le32(rsrc_entry->Pos) & 0x7fffffff), SEEK_SET)<0)
+  {
+    return -1;
+  }
+  if(fread(&buffer, 1, sizeof(buffer), file) != sizeof(buffer))
+  {
+    return -1;
+  }
+#if defined(__FRAMAC__)
+  Frama_C_make_unknown((char *)&buffer, sizeof(buffer));
+#endif
+  off=le32(buffer.off);
+  len=le32(buffer.len);
+  /*@
+    @ loop invariant 0 <= j <= nbr_sections;
+    @ loop variant nbr_sections - j;
+    @*/
+  for(j=0; j<nbr_sections; j++)
+  {
+    const struct pe_image_section_hdr *pe_section=&pe_sections[j];
+    /*@ assert \valid_read(pe_section); */
+    const uint32_t virt_addr_start=le32(pe_section->VirtualAddress);
+    const uint64_t virt_addr_end=(uint64_t)virt_addr_start + le32(pe_section->SizeOfRawData);
+    if(virt_addr_end <= 0xffffffff && virt_addr_start <= off && off < virt_addr_end && (uint64_t)off - virt_addr_start + base <=0xffffffff)
+    {
+      PEVersion(file, off - virt_addr_start + base, len, file_recovery);
+      return 0;
+    }
+  }
+  return 1;
+}
+
+/*@
+  @ requires \valid(file);
+  @ requires base <= 0x7fffffff;
+  @ requires dir_start <= 0x7fffffff;
+  @ requires \valid_read(pe_sections);
+  @ requires \valid(file_recovery);
+  @ requires valid_read_string((char*)&file_recovery->filename);
+  @*/
+static void pe_resource_language(FILE *file, const unsigned int base, const unsigned int dir_start, const struct pe_image_section_hdr *pe_sections, const unsigned int nbr_sections, file_recovery_t *file_recovery)
 {
   struct rsrc_entries_s *rsrc_entries;
-  struct rsrc_entries_s *rsrc_entry;
-  unsigned char buffer[16];
-  int buffer_size;
-  unsigned int nameEntries;
-  unsigned idEntries;
   unsigned int count;
   unsigned int i;
 #ifdef DEBUG_EXE
-  log_info("file_exe_ressource(file, %u, %u, %u, %u)\n", base, dir_start, size, level);
+  log_info("pe_resource_language(file, %u, %u)\n", base, dir_start);
 #endif
-  if(level > 2)
-    return ;
-  if(fseek(file, base + dir_start, SEEK_SET)<0)
-    return ;
-  buffer_size=fread(buffer, 1, sizeof(buffer), file);
-  if(buffer_size<16)
-    return ;
-  nameEntries = buffer[12]+(buffer[13]<<8);
-  idEntries =  buffer[14]+(buffer[15]<<8);
-  count = nameEntries + idEntries;
+  {
+    unsigned char buffer[16];
+    unsigned int nameEntries;
+    unsigned int idEntries;
+    if(fseek(file, base + dir_start, SEEK_SET)<0)
+      return ;
+    if(fread(buffer, 1, sizeof(buffer), file) != sizeof(buffer))
+      return ;
+#if defined(__FRAMAC__)
+    Frama_C_make_unknown((char *)buffer, sizeof(buffer));
+#endif
+    nameEntries = buffer[12]+(buffer[13]<<8);
+    idEntries =  buffer[14]+(buffer[15]<<8);
+    count = nameEntries + idEntries;
+  }
+#ifdef DEBUG_EXE
+  log_info("pe_resource_language count=%u\n", count);
+#endif
   if(count==0 || count > 1024)
     return ;
+  /*@ assert 0 < count <= 1024; */
+#ifdef DISABLED_FOR_FRAMAC
+  rsrc_entries=(struct rsrc_entries_s *)MALLOC(1024 * sizeof(struct rsrc_entries_s));
+#else
   rsrc_entries=(struct rsrc_entries_s *)MALLOC(count * sizeof(struct rsrc_entries_s));
+#endif
+  /*@ assert \valid((char *)rsrc_entries + (0 ..  (unsigned long)((unsigned long)count * sizeof(struct rsrc_entries_s)) - 1)); */
   if(fread(rsrc_entries, sizeof(struct rsrc_entries_s), count, file) != count)
   {
     free(rsrc_entries);
     return ;
   }
-  for(i=0, rsrc_entry=rsrc_entries; i<count; i++, rsrc_entry++)
+#if defined(__FRAMAC__)
+  Frama_C_make_unknown((char *)rsrc_entries, count * sizeof(struct rsrc_entries_s));
+#endif
+  for(i=0; i<count; i++)
   {
-    const unsigned int rsrcType_new=(level==0?le32(rsrc_entry->Type):rsrcType);
+    const struct rsrc_entries_s *rsrc_entry=&rsrc_entries[i];
+    int res=pe_resource_language_aux(file, base, pe_sections, nbr_sections, file_recovery, rsrc_entry);
+    if(res <= 0)
+    {
+      free(rsrc_entries);
+      return ;
+    }
+  }
+  free(rsrc_entries);
+}
+
+/*@
+  @ requires \valid(file);
+  @ requires base <= 0x7fffffff;
+  @ requires dir_start <= 0x7fffffff;
+  @ requires \valid_read(pe_sections);
+  @ requires \valid(file_recovery);
+  @ requires valid_read_string((char*)&file_recovery->filename);
+  @*/
+static void pe_resource_id(FILE *file, const unsigned int base, const unsigned int dir_start, const struct pe_image_section_hdr *pe_sections, const unsigned int nbr_sections, file_recovery_t *file_recovery)
+{
+  struct rsrc_entries_s *rsrc_entries;
+  unsigned int count;
+  unsigned int i;
 #ifdef DEBUG_EXE
-    log_info("ressource %u, %x, offset %u\n",
-	rsrcType_new,
+  log_info("pe_resource_id(file, %u, %u)\n", base, dir_start);
+#endif
+  {
+    unsigned char buffer[16];
+    unsigned int nameEntries;
+    unsigned int idEntries;
+    if(fseek(file, base + dir_start, SEEK_SET)<0)
+      return ;
+    if(fread(buffer, 1, sizeof(buffer), file) != sizeof(buffer))
+      return ;
+#if defined(__FRAMAC__)
+    Frama_C_make_unknown((char *)buffer, sizeof(buffer));
+#endif
+    nameEntries = buffer[12]+(buffer[13]<<8);
+    idEntries =  buffer[14]+(buffer[15]<<8);
+    count = nameEntries + idEntries;
+  }
+  if(count==0 || count > 1024)
+    return ;
+  /*@ assert 0 < count <= 1024; */
+#ifdef DISABLED_FOR_FRAMAC
+  rsrc_entries=(struct rsrc_entries_s *)MALLOC(1024 * sizeof(struct rsrc_entries_s));
+#else
+  rsrc_entries=(struct rsrc_entries_s *)MALLOC(count * sizeof(struct rsrc_entries_s));
+#endif
+  /*@ assert \valid((char *)rsrc_entries + (0 ..  (unsigned long)((unsigned long)count * sizeof(struct rsrc_entries_s)) - 1)); */
+  if(fread(rsrc_entries, sizeof(struct rsrc_entries_s), count, file) != count)
+  {
+    free(rsrc_entries);
+    return ;
+  }
+#if defined(__FRAMAC__)
+  Frama_C_make_unknown((char *)rsrc_entries, count * sizeof(struct rsrc_entries_s));
+#endif
+  for(i=0; i<count; i++)
+  {
+    const struct rsrc_entries_s *rsrc_entry=&rsrc_entries[i];
+#ifdef DEBUG_EXE
+    log_info("resource id=%u, %x, offset %u\n",
+	le32(rsrc_entry->Type),
 	le32(rsrc_entry->Pos),
 	base + (le32(rsrc_entry->Pos) & 0x7fffffff));
 #endif
-    /* Only intersted by version resources */
-    if(rsrcType_new==16)
+    if((le32(rsrc_entry->Pos) & 0x80000000)!=0)
+    {
+	pe_resource_language(file,
+	    base,
+	    le32(rsrc_entry->Pos) & 0x7fffffff,
+	    pe_sections, nbr_sections, file_recovery);
+    }
+  }
+  free(rsrc_entries);
+}
+
+/*@
+  @ requires \valid(file);
+  @ requires \valid_read(pe_sections);
+  @ requires \valid(file_recovery);
+  @ requires valid_read_string((char*)&file_recovery->filename);
+  @*/
+static void pe_resource_type(FILE *file, const unsigned int base, const unsigned int dir_start, const struct pe_image_section_hdr *pe_sections, const unsigned int nbr_sections, file_recovery_t *file_recovery)
+{
+  struct rsrc_entries_s *rsrc_entries;
+  unsigned int count;
+  unsigned int i;
+#ifdef DEBUG_EXE
+  log_info("pe_resource_type(file, %u, %u)\n", base, dir_start);
+#endif
+  /* TODO: remove these artifical limits ? */
+  if(base > 0x7fffffff || dir_start > 0x7fffffff)
+    return ;
+  /*@ assert base <= 0x7fffffff; */
+  {
+    unsigned char buffer[16];
+    unsigned int nameEntries;
+    unsigned int idEntries;
+    if(fseek(file, base, SEEK_SET)<0)
+      return ;
+    if(fread(buffer, 1, sizeof(buffer), file) != sizeof(buffer))
+      return ;
+#if defined(__FRAMAC__)
+    Frama_C_make_unknown((char *)buffer, sizeof(buffer));
+#endif
+    nameEntries = buffer[12]+(buffer[13]<<8);
+    idEntries =  buffer[14]+(buffer[15]<<8);
+    count = nameEntries + idEntries;
+  }
+  if(count==0 || count > 1024)
+    return ;
+  /*@ assert 0 < count <= 1024; */
+#ifdef DISABLED_FOR_FRAMAC
+  rsrc_entries=(struct rsrc_entries_s *)MALLOC(1024 * sizeof(struct rsrc_entries_s));
+#else
+  rsrc_entries=(struct rsrc_entries_s *)MALLOC(count * sizeof(struct rsrc_entries_s));
+#endif
+  /*@ assert \valid((char *)rsrc_entries + (0 ..  (unsigned long)((unsigned long)count * sizeof(struct rsrc_entries_s)) - 1)); */
+  if(fread(rsrc_entries, sizeof(struct rsrc_entries_s), count, file) != count)
+  {
+    free(rsrc_entries);
+    return ;
+  }
+#if defined(__FRAMAC__)
+  Frama_C_make_unknown((char *)rsrc_entries, count * sizeof(struct rsrc_entries_s));
+#endif
+  for(i=0; i<count; i++)
+  {
+    const struct rsrc_entries_s *rsrc_entry=&rsrc_entries[i];
+    /*@ assert \valid_read(rsrc_entry); */
+    const unsigned int rsrcType=le32(rsrc_entry->Type);
+#ifdef DEBUG_EXE
+    log_info("resource type=%u, %x, offset %u\n",
+	rsrcType,
+	le32(rsrc_entry->Pos),
+	base + (le32(rsrc_entry->Pos) & 0x7fffffff));
+#endif
+    /* https://docs.microsoft.com/en-us/windows/win32/menurc/resource-types
+     * RT_CURSOR=1, RT_ICON=3, RT_VERSION=16 */
+    /* Only interested by version resources */
+    if(rsrcType==16)
     {
       if((le32(rsrc_entry->Pos) & 0x80000000)!=0)
       {
-	file_exe_ressource(file,
+	pe_resource_id(file,
 	    base,
 	    le32(rsrc_entry->Pos) & 0x7fffffff,
-	    size,
-	    (level==0?le32(rsrc_entry->Type):rsrcType),
-	    level + 1,
 	    pe_sections, nbr_sections, file_recovery);
-      }
-      if(level==2)
-      {
-	unsigned int off;
-	unsigned int len;
-	if(fseek(file, base + (le32(rsrc_entry->Pos) & 0x7fffffff), SEEK_SET)<0)
-	{
-	  free(rsrc_entries);
-	  return ;
-	}
-	buffer_size=fread(buffer, 1, sizeof(buffer), file);
-	if(buffer_size<16)
-	{
-	  free(rsrc_entries);
-	  return ;
-	}
-	off=buffer[0]+ (buffer[1]<<8) + (buffer[2]<<16) + (buffer[3]<<24);
-	len=buffer[4]+ (buffer[5]<<8) + (buffer[6]<<16) + (buffer[7]<<24);
-	{
-	  const struct pe_image_section_hdr *pe_section;
-	  for(i=0, pe_section=pe_sections; i<nbr_sections; i++,pe_section++)
-	  {
-	    if(le32(pe_section->VirtualAddress) <= off
-	      && off < le32(pe_section->VirtualAddress) + le32(pe_section->SizeOfRawData))
-	    {
-	      PEVersion(file, off - le32(pe_section->VirtualAddress) + base, len, file_recovery);
-	      free(rsrc_entries);
-	      return ;
-	    }
-	  }
-	}
-	free(rsrc_entries);
-	return ;
       }
     }
   }
   free(rsrc_entries);
 }
 
+/*@
+  @ requires file_recovery->file_rename==&file_rename_pe_exe;
+  @ requires valid_file_rename_param(file_recovery);
+  @ ensures  valid_file_rename_result(file_recovery);
+  @*/
 static void file_rename_pe_exe(file_recovery_t *file_recovery)
 {
   unsigned char buffer[4096];
   FILE *file;
   int buffer_size;
-  const struct dos_image_file_hdr *dos_hdr=(const struct dos_image_file_hdr*)buffer;
+  const struct dos_image_file_hdr *dos_hdr;
   const struct pe_image_file_hdr *pe_hdr;
+  unsigned int e_lfanew;
   if((file=fopen(file_recovery->filename, "rb"))==NULL)
     return;
   buffer_size=fread(buffer, 1, sizeof(buffer), file);
+  /*@ assert buffer_size <= sizeof(buffer); */
   if(buffer_size < (int)sizeof(struct dos_image_file_hdr))
   {
     fclose(file);
     return ;
   }
+  /*@ assert buffer_size >= sizeof(struct dos_image_file_hdr); */
+#if defined(__FRAMAC__)
+  Frama_C_make_unknown((char *)buffer, sizeof(buffer));
+#endif
   if(memcmp(buffer,exe_header,sizeof(exe_header))!=0)
   {
     fclose(file);
     return ;
   }
-  if((unsigned int)buffer_size < le32(dos_hdr->e_lfanew)+sizeof(struct pe_image_file_hdr))
+  dos_hdr=(const struct dos_image_file_hdr*)buffer;
+  /*@ assert \valid_read(dos_hdr); */
+  e_lfanew=le32(dos_hdr->e_lfanew);
+  if((unsigned int)buffer_size < e_lfanew+sizeof(struct pe_image_file_hdr))
   {
     fclose(file);
     return ;
   }
-  pe_hdr=(const struct pe_image_file_hdr *)(buffer+le32(dos_hdr->e_lfanew));
-  if(le32(dos_hdr->e_lfanew)==0 ||
-      le32(dos_hdr->e_lfanew) > buffer_size-sizeof(struct pe_image_file_hdr) ||
-      le32(pe_hdr->Magic) != IMAGE_NT_SIGNATURE)
+  if(e_lfanew==0 ||
+      e_lfanew > buffer_size-sizeof(struct pe_image_file_hdr))
+  {
+    fclose(file);
+    return ;
+  }
+  pe_hdr=(const struct pe_image_file_hdr *)(buffer+e_lfanew);
+  /*@ assert \valid_read(pe_hdr); */
+  if(le32(pe_hdr->Magic) != IMAGE_NT_SIGNATURE)
   {
     fclose(file);
     return ;
   }
   {
+    const uint64_t offset_sections=e_lfanew + sizeof(struct pe_image_file_hdr) + le16(pe_hdr->SizeOfOptionalHeader);
+    /* https://docs.microsoft.com/en-us/windows/win32/debug/pe-format
+     * Windows loader limits the number of sections to 96
+     */
+    const unsigned int nbr_sections=(le16(pe_hdr->NumberOfSections) < 96?le16(pe_hdr->NumberOfSections) : 96);
+    struct pe_image_section_hdr pe_sections[96];
     unsigned int i;
-    const struct pe_image_section_hdr *pe_sections;
-    const struct pe_image_section_hdr *pe_section;
-    unsigned int nbr_sections;
-    pe_sections=(const struct pe_image_section_hdr*)
-      ((const unsigned char*)pe_hdr + sizeof(struct pe_image_file_hdr) + le16(pe_hdr->SizeOfOptionalHeader));
-    for(i=0, pe_section=pe_sections;
-	i<le16(pe_hdr->NumberOfSections) && (const unsigned char*)pe_section < buffer+buffer_size;
-	i++, pe_section++)
+    if(nbr_sections == 0)
     {
+      fclose(file);
+      return ;
+    }
+    /*@ assert 0 < nbr_sections <= 96; */
+    if(fseek(file, offset_sections, SEEK_SET)<0)
+    {
+      fclose(file);
+      return ;
+    }
+    if(fread(pe_sections, sizeof(struct pe_image_section_hdr), nbr_sections, file) != nbr_sections)
+    {
+      fclose(file);
+      return ;
+    }
+#if defined(__FRAMAC__)
+    Frama_C_make_unknown((char *)pe_sections, sizeof(pe_sections));
+#endif
 #ifdef DEBUG_EXE
-      if(le32(pe_section->SizeOfRawData)>0)
+    /*@
+      @ loop invariant 0 <= i <= nbr_sections;
+      @ loop variant nbr_sections - i;
+      @*/
+    for(i=0; i<nbr_sections; i++)
+    {
+      const struct pe_image_section_hdr *pe_section=&pe_sections[i];
+      /*@ assert \valid_read(pe_section); */
+      if(le32(pe_section->VirtualSize)>0)
       {
 	log_info("%s 0x%lx-0x%lx\n", pe_section->Name,
 	    (unsigned long)le32(pe_section->VirtualAddress),
 	    (unsigned long)le32(pe_section->VirtualAddress)+le32(pe_section->VirtualSize)-1);
       }
-#endif
     }
-    nbr_sections=i;
-    for(i=0, pe_section=pe_sections;
-	i<le16(pe_hdr->NumberOfSections) && (const unsigned char*)pe_section < buffer+buffer_size;
-	i++, pe_section++)
+#endif
+    /*@
+      @ loop invariant 0 <= i <= nbr_sections;
+      @ loop variant nbr_sections - i;
+      @*/
+    for(i=0; i<nbr_sections; i++)
     {
+      const struct pe_image_section_hdr *pe_section=&pe_sections[i];
+      /*@ assert \valid_read(pe_section); */
       if(le32(pe_section->SizeOfRawData)>0)
       {
 	if(memcmp((const char*)pe_section->Name, ".rsrc", 6)==0)
 	{
-	  file_exe_ressource(file,
+	  pe_resource_type(file,
 	      le32(pe_section->PointerToRawData),
-	      0,
 	      le32(pe_section->SizeOfRawData),
-	      0,
-	      0,
 	      pe_sections, nbr_sections, file_recovery);
 	  fclose(file);
 	  return;
@@ -520,3 +730,289 @@ static void file_rename_pe_exe(file_recovery_t *file_recovery)
   }
   fclose(file);
 }
+
+/*@
+  @ requires buffer_size >= 2;
+  @ requires separation: \separated(&file_hint_exe, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ ensures (\result == 1) ==> (file_recovery_new->extension == file_hint_exe.extension || file_recovery_new->extension == extension_dll);
+  @ ensures (\result == 1) ==> (file_recovery_new->data_check == \null || file_recovery_new->data_check == &data_check_size);
+  @ ensures (\result == 1) ==> (file_recovery_new->file_check == \null || file_recovery_new->file_check == &file_check_size);
+  @ ensures (\result == 1) ==> (file_recovery_new->file_rename == \null || file_recovery_new->file_rename == &file_rename_pe_exe);
+  @ ensures (\result == 1) ==> (valid_read_string(file_recovery_new->extension));
+  @ assigns  *file_recovery_new;
+  @*/
+static int header_check_exe(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
+{
+  const struct dos_image_file_hdr *dos_hdr=(const struct dos_image_file_hdr*)buffer;
+  if(memcmp(buffer,exe_header,sizeof(exe_header))!=0)
+    return 0;
+  if(le32(dos_hdr->e_lfanew)>0 &&
+      le32(dos_hdr->e_lfanew) <= buffer_size-sizeof(struct pe_image_file_hdr))
+  {
+    const struct pe_image_file_hdr *pe_hdr=(const struct pe_image_file_hdr *)(buffer+le32(dos_hdr->e_lfanew));
+    if((le32(pe_hdr->Magic) & 0xffff) == IMAGE_WIN16_SIGNATURE)
+    {
+      /* NE Win16 */
+      reset_file_recovery(file_recovery_new);
+      file_recovery_new->extension=file_hint_exe.extension;
+      file_recovery_new->min_filesize=le32(dos_hdr->e_lfanew) + sizeof(struct pe_image_file_hdr);
+      return 1;
+    }
+    if((le32(pe_hdr->Magic) & 0xffff) == IMAGE_NT_SIGNATURE)
+    {
+      /* Windows PE */
+      if(le16(pe_hdr->Characteristics) & 0x2000)
+      {
+	/* Dynamic Link Library */
+	reset_file_recovery(file_recovery_new);
+	file_recovery_new->extension=extension_dll;
+      }
+      else if(le16(pe_hdr->Characteristics) & 0x02)
+      {
+	reset_file_recovery(file_recovery_new);
+	file_recovery_new->extension=file_hint_exe.extension;
+      }
+      else
+      {
+#ifdef DEBUG_EXE
+	log_warning("EXE rejected, bad characteristics %02x\n", le16(pe_hdr->Characteristics));
+#endif
+	return 0;
+      }
+      file_recovery_new->time=le32(pe_hdr->TimeDateStamp);
+#ifdef DEBUG_EXE
+      {
+	const struct pe_image_optional_hdr32 *pe_image_optional32=(const struct pe_image_optional_hdr32 *)
+	  (((const unsigned char*)pe_hdr + sizeof(struct pe_image_file_hdr)));
+	if((const unsigned char*)(pe_image_optional32+1) <= buffer+buffer_size)
+	{
+	  /*@ assert \valid_read(pe_image_optional32); */
+	  if(le16(pe_image_optional32->Magic)==IMAGE_NT_OPTIONAL_HDR_MAGIC)
+	  {
+	    log_debug("SizeOfCode %lx\n", (long unsigned)le32(pe_image_optional32->SizeOfCode));
+	    log_debug("SizeOfImage %lx\n", (long unsigned)le32(pe_image_optional32->SizeOfImage));
+	  }
+	  else if(le16(pe_image_optional32->Magic)==IMAGE_NT_OPTIONAL_HDR64_MAGIC)
+	  {
+	    const struct pe_image_optional_hdr64 *pe_image_optional64=(const struct pe_image_optional_hdr64 *)
+	      (((const unsigned char*)pe_hdr + sizeof(struct pe_image_file_hdr)));
+	  }
+	  log_debug("PE image opt 0x%lx-0x%lx\n", (long unsigned)sizeof(struct pe_image_file_hdr),
+	      (long unsigned)(sizeof(struct pe_image_file_hdr) + le16(pe_hdr->SizeOfOptionalHeader) - 1));
+	}
+      }
+#endif
+      {
+	unsigned int i;
+	uint64_t sum=le32(dos_hdr->e_lfanew) + sizeof(struct pe_image_file_hdr);
+	const struct pe_image_section_hdr *pe_image_section=(const struct pe_image_section_hdr*)
+	  ((const unsigned char*)pe_hdr + sizeof(struct pe_image_file_hdr) + le16(pe_hdr->SizeOfOptionalHeader));
+	/*@
+	  @ loop assigns i, pe_image_section, sum;
+	  @ loop variant le16(pe_hdr->NumberOfSections) - i;
+	  @*/
+	for(i=0;
+	    i<le16(pe_hdr->NumberOfSections) &&
+	    (const unsigned char*)(pe_image_section+1) <= buffer+buffer_size;
+	    i++,pe_image_section++)
+	{
+	  if(le32(pe_image_section->SizeOfRawData)>0)
+	  {
+	    const uint64_t tmp=(uint64_t)le32(pe_image_section->PointerToRawData) + le32(pe_image_section->SizeOfRawData);
+#ifdef DEBUG_EXE
+	    log_debug("%s 0x%lx-0x%lx\n", pe_image_section->Name,
+		(unsigned long)le32(pe_image_section->PointerToRawData),
+		(unsigned long)(tmp-1));
+#endif
+	    if(le32(pe_image_section->SizeOfRawData)%32==0)
+	    {
+	      if(sum < tmp)
+		sum=tmp;
+	    }
+	  }
+	  if(le16(pe_image_section->NumberOfRelocations)>0)
+	  {
+	    /*@ assert le16(pe_image_section->NumberOfRelocations)>0; */
+	    const uint64_t tmp=(uint64_t)le32(pe_image_section->PointerToRelocations)+ 1*le16(pe_image_section->NumberOfRelocations);
+	    /*@ assert tmp > 0; */
+#ifdef DEBUG_EXE
+	    log_debug("relocations 0x%lx-0x%lx\n",
+		(unsigned long)le32(pe_image_section->PointerToRelocations),
+		(unsigned long)(tmp-1));
+#endif
+	    if(sum < tmp)
+	      sum = tmp;
+	  }
+	}
+	if(le32(pe_hdr->NumberOfSymbols)>0)
+	{
+	  /*@ assert le32(pe_hdr->NumberOfSymbols)>0; */
+	  const uint64_t tmp=(uint64_t)le32(pe_hdr->PointerToSymbolTable)+ IMAGE_SIZEOF_SYMBOL*(uint64_t)le32(pe_hdr->NumberOfSymbols);
+	  /*@ assert tmp > 0; */
+#ifdef DEBUG_EXE
+	  log_debug("Symboles 0x%lx-0x%lx\n", (long unsigned)le32(pe_hdr->PointerToSymbolTable),
+	      (long unsigned)(tmp-1));
+#endif
+	  if(le32(pe_hdr->NumberOfSymbols)<0x10000)
+	  {
+	    if(sum < tmp)
+	      sum = tmp;
+	  }
+	}
+	/* It's not perfect, EXE overlay are not recovered */
+	file_recovery_new->calculated_file_size=sum;
+      }
+      file_recovery_new->data_check=&data_check_size;
+      file_recovery_new->file_check=&file_check_size;
+      file_recovery_new->file_rename=&file_rename_pe_exe;
+      return 1;
+    }
+  }
+  if(le16(dos_hdr->bytes_in_last_block) <= 512 &&
+      le16(dos_hdr->blocks_in_file) > 0 &&
+      le16(dos_hdr->min_extra_paragraphs) <= le16(dos_hdr->max_extra_paragraphs)
+    )
+  {
+    /* MSDOS EXE */
+    uint64_t coff_offset=le16(dos_hdr->blocks_in_file)*512;
+    if(le16(dos_hdr->bytes_in_last_block))
+      coff_offset-=512-le16(dos_hdr->bytes_in_last_block);
+
+    if(coff_offset < buffer_size-1 &&
+	buffer[coff_offset]==0x4c && buffer[coff_offset+1]==0x01)
+    { /*  COFF_I386MAGIC */
+      reset_file_recovery(file_recovery_new);
+      file_recovery_new->extension=file_hint_exe.extension;
+      file_recovery_new->min_filesize=coff_offset+2;
+      return 1;
+    }
+#ifdef DEBUG_EXE
+    {
+      const struct exe_reloc *exe_relocs;
+      const unsigned int reloc_table_offset=le16(dos_hdr->reloc_table_offset);
+      const unsigned int num_relocs=le16(dos_hdr->num_relocs);
+      log_info("Maybe a DOS EXE\n");
+      log_info("blocks %llu\n", (long long unsigned)coff_offset);
+      log_info("data start %llx\n", (long long unsigned)16*le16(dos_hdr->header_paragraphs));
+      log_info("reloc %u\n", num_relocs);
+      if(reloc_table_offset + num_relocs * sizeof(struct exe_reloc) <= buffer_size)
+      {
+	unsigned int i;
+	/*@ assert reloc_table_offset + num_relocs * sizeof(struct exe_reloc) <= buffer_size; */
+	exe_relocs=(const struct exe_reloc *)(buffer+reloc_table_offset);
+	/*@ assert \valid_read(exe_relocs + (0 .. num_relocs-1)); */
+	/*@
+	  @ loop invariant 0 <= i <= num_relocs;
+	  @ loop variant num_relocs -i;
+	  @ */
+	for(i=0; i < num_relocs; i++)
+	{
+	  /*@ assert 0 <= i <= num_relocs; */
+	  const struct exe_reloc *exe_reloc=&exe_relocs[i];
+	  /*@ assert \valid_read(exe_reloc); */
+	  log_info("offset %x, segment %x\n",
+	      le16(exe_reloc->offset), le16(exe_reloc->segment));
+	}
+      }
+    }
+#endif
+  }
+  return 0;
+}
+
+static void register_header_check_exe(file_stat_t *file_stat)
+{
+  register_header_check(0, exe_header,sizeof(exe_header), &header_check_exe, file_stat);
+}
+#endif
+
+#if defined(MAIN_exe)
+#define BLOCKSIZE 65536u
+int main()
+{
+  const char fn[] = "recup_dir.1/f0000000.exe";
+  unsigned char buffer[BLOCKSIZE];
+  file_recovery_t file_recovery_new;
+  file_recovery_t file_recovery;
+  file_stat_t file_stats;
+
+  /*@ assert \valid(buffer + (0 .. (BLOCKSIZE - 1))); */
+#if defined(__FRAMAC__)
+  Frama_C_make_unknown((char *)buffer, BLOCKSIZE);
+#endif
+
+  reset_file_recovery(&file_recovery);
+  file_recovery.blocksize=BLOCKSIZE;
+  file_recovery_new.blocksize=BLOCKSIZE;
+  file_recovery_new.data_check=NULL;
+  file_recovery_new.file_stat=NULL;
+  file_recovery_new.file_check=NULL;
+  file_recovery_new.file_rename=NULL;
+  file_recovery_new.calculated_file_size=0;
+  file_recovery_new.file_size=0;
+  file_recovery_new.location.start=0;
+
+  file_stats.file_hint=&file_hint_exe;
+  file_stats.not_recovered=0;
+  file_stats.recovered=0;
+  register_header_check_exe(&file_stats);
+  if(header_check_exe(buffer, BLOCKSIZE, 0u, &file_recovery, &file_recovery_new)!=1)
+    return 0;
+  /*@ assert valid_read_string((char *)&fn); */
+  memcpy(file_recovery_new.filename, fn, sizeof(fn));
+  /*@ assert valid_read_string((char *)&file_recovery_new.filename); */
+  /*@ assert file_recovery_new.file_size == 0;	*/
+  /*@ assert file_recovery_new.extension == file_hint_exe.extension || file_recovery_new.extension == extension_dll;	*/
+  file_recovery_new.file_stat=&file_stats;
+  if(file_recovery_new.file_stat!=NULL && file_recovery_new.file_stat->file_hint!=NULL &&
+    file_recovery_new.data_check!=NULL)
+  {
+    unsigned char big_buffer[2*BLOCKSIZE];
+    data_check_t res_data_check=DC_CONTINUE;
+    memset(big_buffer, 0, BLOCKSIZE);
+    memcpy(big_buffer + BLOCKSIZE, buffer, BLOCKSIZE);
+    /*@ assert file_recovery_new.data_check == &data_check_size; */
+    /*@ assert file_recovery_new.file_size == 0; */;
+    res_data_check=data_check_size(big_buffer, 2*BLOCKSIZE, &file_recovery_new);
+    file_recovery_new.file_size+=BLOCKSIZE;
+    if(res_data_check == DC_CONTINUE)
+    {
+      memcpy(big_buffer, big_buffer + BLOCKSIZE, BLOCKSIZE);
+#if defined(__FRAMAC__)
+      Frama_C_make_unknown((char *)big_buffer + BLOCKSIZE, BLOCKSIZE);
+#endif
+      data_check_size(big_buffer, 2*BLOCKSIZE, &file_recovery_new);
+    }
+  }
+  if(file_recovery_new.file_stat!=NULL)
+  {
+    file_recovery_t file_recovery_new2;
+    /* Test when another file of the same is detected in the next block */
+    file_recovery_new2.blocksize=BLOCKSIZE;
+    file_recovery_new2.file_stat=NULL;
+    file_recovery_new2.file_check=NULL;
+    file_recovery_new2.location.start=BLOCKSIZE;
+    file_recovery_new.handle=NULL;	/* In theory should be not null */
+    header_check_exe(buffer, BLOCKSIZE, 0, &file_recovery_new, &file_recovery_new2);
+  }
+  if(file_recovery_new.file_check!=NULL)
+  {
+    /*@ assert file_recovery_new.file_check == &file_check_size; */
+    file_recovery_new.handle=fopen(fn, "rb");
+    if(file_recovery_new.handle!=NULL)
+    {
+      file_check_size(&file_recovery_new);
+      fclose(file_recovery_new.handle);
+    }
+  }
+  if(file_recovery_new.file_rename!=NULL)
+  {
+    /*@ assert valid_read_string((char *)&file_recovery_new.filename); */
+    /*@ assert file_recovery_new.file_rename == &file_rename_pe_exe; */
+    file_rename_pe_exe(&file_recovery_new);
+  }
+  return 0;
+}
+#endif

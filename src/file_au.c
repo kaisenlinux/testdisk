@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_au)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,6 +32,7 @@
 #include "common.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_au(file_stat_t *file_stat);
 
 const file_hint_t file_hint_au= {
@@ -53,21 +55,31 @@ struct header_au_s
   uint32_t channels;
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires buffer_size > sizeof(struct header_au_s);
+  @ requires separation: \separated(&file_hint_au, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_au(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct header_au_s *au=(const struct header_au_s *)buffer;
-  if((const uint32_t)be32(au->offset) >= sizeof(struct header_au_s) &&
+  const unsigned int offset=be32(au->offset);
+  const unsigned int size=be32(au->size);
+  if(offset >= sizeof(struct header_au_s) &&
     be32(au->encoding)>0 && be32(au->encoding)<=27 &&
     be32(au->channels)>0 && be32(au->channels)<=256)
   {
-    if(be32(au->size)!=0xffffffff)
+    if(size!=0xffffffff)
     {
-      if(be32(au->offset)+be32(au->size) < 111)
+      const uint64_t cfs=(uint64_t)offset + size;
+      if(cfs < 111)
 	return 0;
       reset_file_recovery(file_recovery_new);
       file_recovery_new->min_filesize=111;
       file_recovery_new->extension=file_hint_au.extension;
-      file_recovery_new->calculated_file_size=(uint64_t)be32(au->offset)+be32(au->size);
+      file_recovery_new->calculated_file_size=cfs;
       file_recovery_new->data_check=&data_check_size;
       file_recovery_new->file_check=&file_check_size;
       return 1;
@@ -85,3 +97,4 @@ static void register_header_check_au(file_stat_t *file_stat)
   static const unsigned char au_header[4]= {'.','s','n','d'};
   register_header_check(0, au_header,sizeof(au_header), &header_check_au, file_stat);
 }
+#endif

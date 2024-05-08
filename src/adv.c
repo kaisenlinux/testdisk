@@ -79,12 +79,43 @@ extern const arch_fnct_t arch_xbox;
 
 #define DEFAULT_IMAGE_NAME "image.dd"
 
-static int is_exfat(const partition_t *partition);
-static int is_hfs(const partition_t *partition);
-static int is_hfsp(const partition_t *partition);
-static int is_linux(const partition_t *partition);
-static int is_part_hfs(const partition_t *partition);
-static int is_part_hfsp(const partition_t *partition);
+static int is_part_hfs(const partition_t *partition)
+{
+  if( partition->part_type_i386 == P_HFS ||
+      partition->part_type_mac  == PMAC_HFS)
+    return 1;
+  if(guid_cmp(partition->part_type_gpt,GPT_ENT_TYPE_MAC_HFS)==0)
+    return 1;
+  return 0;
+}
+
+static int is_part_hfsp(const partition_t *partition)
+{
+  if( partition->part_type_i386 == P_HFSP ||
+      partition->part_type_mac  == PMAC_HFS )
+      return 1;
+  if(guid_cmp(partition->part_type_gpt,GPT_ENT_TYPE_MAC_HFS)==0)
+    return 1;
+  return 0;
+}
+
+int is_part_linux(const partition_t *partition)
+{
+  if(partition->arch==&arch_i386 && partition->part_type_i386==P_LINUX)
+      return 1;
+  if(partition->arch==&arch_sun  && partition->part_type_sun==PSUN_LINUX)
+      return 1;
+  if(partition->arch==&arch_mac  && partition->part_type_mac==PMAC_LINUX)
+      return 1;
+  if(partition->arch==&arch_gpt &&
+      (
+       guid_cmp(partition->part_type_gpt,GPT_ENT_TYPE_LINUX_DATA)==0 ||
+       guid_cmp(partition->part_type_gpt,GPT_ENT_TYPE_LINUX_HOME)==0 ||
+       guid_cmp(partition->part_type_gpt,GPT_ENT_TYPE_LINUX_SRV)==0
+      ))
+      return 1;
+  return 0;
+}
 
 static int is_exfat(const partition_t *partition)
 {
@@ -128,46 +159,8 @@ static int is_linux(const partition_t *partition)
   return 0;
 }
 
-static int is_part_hfs(const partition_t *partition)
-{
-  if( partition->part_type_i386 == P_HFS ||
-      partition->part_type_mac  == PMAC_HFS)
-    return 1;
-  if(guid_cmp(partition->part_type_gpt,GPT_ENT_TYPE_MAC_HFS)==0)
-    return 1;
-  return 0;
-}
-
-static int is_part_hfsp(const partition_t *partition)
-{
-  if( partition->part_type_i386 == P_HFSP ||
-      partition->part_type_mac  == PMAC_HFS )
-      return 1;
-  if(guid_cmp(partition->part_type_gpt,GPT_ENT_TYPE_MAC_HFS)==0)
-    return 1;
-  return 0;
-}
-
-int is_part_linux(const partition_t *partition)
-{
-  if(partition->arch==&arch_i386 && partition->part_type_i386==P_LINUX)
-      return 1;
-  if(partition->arch==&arch_sun  && partition->part_type_sun==PSUN_LINUX)
-      return 1;
-  if(partition->arch==&arch_mac  && partition->part_type_mac==PMAC_LINUX)
-      return 1;
-  if(partition->arch==&arch_gpt &&
-      (
-       guid_cmp(partition->part_type_gpt,GPT_ENT_TYPE_LINUX_DATA)==0 ||
-       guid_cmp(partition->part_type_gpt,GPT_ENT_TYPE_LINUX_HOME)==0 ||
-       guid_cmp(partition->part_type_gpt,GPT_ENT_TYPE_LINUX_SRV)==0
-      ))
-      return 1;
-  return 0;
-}
-
 #ifdef HAVE_NCURSES
-static void interface_adv_ncurses(disk_t *disk, const int rewrite, list_part_t *list_part, list_part_t *current_element, const int offset)
+static void interface_adv_ncurses(disk_t *disk, const int rewrite, list_part_t *list_part, const list_part_t *current_element, const int offset)
 {
   list_part_t *element;
   int i;
@@ -369,24 +362,25 @@ static int adv_menu_boot_selected(disk_t *disk, partition_t *partition, const in
   return 0;
 }
 
-static void adv_menu_image_selected(disk_t *disk, partition_t *partition, char **current_cmd)
+static void adv_menu_image_selected(disk_t *disk, const partition_t *partition, char **current_cmd)
 {
-  char *dst_path;
+  char dst_path[4096];
+  dst_path[0]='\0';
 #ifdef HAVE_NCURSES
   if(*current_cmd!=NULL)
-    dst_path=get_default_location();
+    td_getcwd(dst_path, sizeof(dst_path));
   else
   {
     char msg[256];
     snprintf(msg, sizeof(msg),
 	"Please select where to store the file image.dd (%u MB), an image of the partition",
 	(unsigned int)(partition->part_size/1000/1000));
-    dst_path=ask_location(msg, "", NULL);
+    ask_location(dst_path, sizeof(dst_path), msg, "");
   }
 #else
-  dst_path=get_default_location();
+  td_getcwd(&dst_path, sizeof(dst_path));
 #endif
-  if(dst_path!=NULL)
+  if(dst_path[0]!='\0')
   {
     char *filename=(char *)MALLOC(strlen(dst_path) + 1 + strlen(DEFAULT_IMAGE_NAME) + 1);
     strcpy(filename, dst_path);
@@ -394,11 +388,10 @@ static void adv_menu_image_selected(disk_t *disk, partition_t *partition, char *
     strcat(filename, DEFAULT_IMAGE_NAME);
     disk_image(disk, partition, filename);
     free(filename);
-    free(dst_path);
   }
 }
 
-static void adv_menu_undelete_selected(disk_t *disk, partition_t *partition, const int verbose, char **current_cmd)
+static void adv_menu_undelete_selected(disk_t *disk, const partition_t *partition, const int verbose, char **current_cmd)
 {
   if(partition->sb_offset!=0 && partition->sb_size>0)
   {
@@ -424,7 +417,7 @@ static void adv_menu_undelete_selected(disk_t *disk, partition_t *partition, con
   }
 }
 
-static void adv_menu_list_selected(disk_t *disk, partition_t *partition, const int verbose, const int expert, char **current_cmd)
+static void adv_menu_list_selected(disk_t *disk, const partition_t *partition, const int verbose, const int expert, char **current_cmd)
 {
   if(partition->sb_offset!=0 && partition->sb_size>0)
   {
@@ -467,6 +460,7 @@ void interface_adv(disk_t *disk_car, const int verbose,const int dump_ind, const
   assert(current_cmd!=NULL);
   log_info("\nInterface Advanced\n");
   list_part=disk_car->arch->read_part(disk_car,verbose,0);
+  /*@ assert valid_list_part(list_part); */
   current_element=list_part;
   log_all_partitions(disk_car, list_part);
   while(1)

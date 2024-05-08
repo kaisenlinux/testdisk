@@ -3,7 +3,7 @@ Section: admin
 Priority: optional
 XSBC-Original-Maintainer: Jean-Michel Kelbert <kelbert@debian.org>
 Maintainer: Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>
-Build-Depends: debhelper (>= 13),
+Build-Depends: debhelper-compat (= 13),
 	       dh-autoreconf,
 	       build-essential,
 	       libext2fs-dev,
@@ -17,13 +17,13 @@ Build-Depends: debhelper (>= 13),
 	       qttools5-dev-tools,
 	       pkg-config,
 	       git,
-Standards-Version: 4.6.0
+Standards-Version: 4.7.0
 Homepage: https://www.cgsecurity.org/
 Vcs-Browser: https://gitlab.com/kaisenlinux/packages/testdisk
 Vcs-Git: https://gitlab.com/kaisenlinux/packages/testdisk.git
 
 Package: testdisk
-Architecture: any
+Architecture: amd64
 Depends: ${shlibs:Depends},
 	 ${misc:Depends},
 	 libext2fs2,

@@ -31,14 +31,20 @@
 #include "common.h"
 #include "list.h"
 #include "filegen.h"
+#include "photorec.h"
 #include "exfatp.h"
 #include "exfat.h"
 #include "log.h"
 #include "fat.h"
 
+/*@
+  @ requires \valid_read(buffer + ( 0 .. size-1));
+  @ assigns \nothing;
+  @*/
 static struct exfat_alloc_bitmap_entry *exfat_get_bitmap(unsigned char*buffer, const unsigned int size)
 {
   unsigned int i;
+  /*@ loop assigns i; */
   for(i=0; i<size; i+=0x20)
     if(buffer[i]==0x81)
       return (struct exfat_alloc_bitmap_entry *)&buffer[i];

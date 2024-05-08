@@ -42,6 +42,9 @@
 #include <stdlib.h>
 #endif
 #include <errno.h>
+#if defined(__FRAMAC__)
+#include "__fc_builtin.h"
+#endif
 #include "types.h"
 #include "common.h"
 #include "intrf.h"
@@ -53,6 +56,34 @@
 #define SESSION_MAXSIZE 40960
 #define SESSION_FILENAME "photorec.ses"
 
+static int session_save_empty(void)
+{
+  FILE *f_session;
+  f_session=fopen(SESSION_FILENAME,"wb");
+  if(!f_session)
+  {
+#ifndef DISABLED_FOR_FRAMAC
+    log_critical("Can't create photorec.ses file: %s\n",strerror(errno));
+#endif
+    return -1;
+  }
+  { /* Reserve some space */
+    int res;
+    char *buffer;
+    buffer=(char *)MALLOC(SESSION_MAXSIZE);
+    memset(buffer,0,SESSION_MAXSIZE);
+    res=fwrite(buffer,1,SESSION_MAXSIZE,f_session);
+    free(buffer);
+    if(res<SESSION_MAXSIZE)
+    {
+      fclose(f_session);
+      return -1;
+    }
+  }
+  fclose(f_session);
+  return 0;
+}
+
 int session_load(char **cmd_device, char **current_cmd, alloc_data_t *list_free_space)
 {
   FILE *f_session;
@@ -63,19 +94,26 @@ int session_load(char **cmd_device, char **current_cmd, alloc_data_t *list_free_
   unsigned int buffer_size;
 //  time_t my_time;
   char *info=NULL;
+  *cmd_device=NULL;
+  *current_cmd=NULL;
   f_session=fopen(SESSION_FILENAME,"rb");
   if(!f_session)
   {
     log_info("Can't open photorec.ses file: %s\n",strerror(errno));
-    session_save(NULL, NULL, NULL);
+    session_save_empty();
     return -1;
   }
-  if(fstat(fileno(f_session), &stat_rec)<0)
-    buffer_size=SESSION_MAXSIZE;
-  else
+#ifndef DISABLED_FOR_FRAMAC
+  if(fstat(fileno(f_session), &stat_rec)>=0)
     buffer_size=stat_rec.st_size;
+  else
+#endif
+    buffer_size=SESSION_MAXSIZE;
   buffer=(char *)MALLOC(buffer_size+1);
   taille=fread(buffer,1,buffer_size,f_session);
+#if defined(__FRAMAC__)
+  Frama_C_make_unknown(buffer, buffer_size);
+#endif
   buffer[taille]='\0';
   fclose(f_session);
   pos=buffer;
@@ -159,18 +197,23 @@ int session_load(char **cmd_device, char **current_cmd, alloc_data_t *list_free_
   }
 }
 
-int session_save(alloc_data_t *list_free_space, struct ph_param *params,  const struct ph_options *options)
+int session_save(const alloc_data_t *list_free_space, const struct ph_param *params,  const struct ph_options *options)
 {
   FILE *f_session;
-  if(params!=NULL && params->status==STATUS_QUIT)
+  if(params->status==STATUS_QUIT)
     return 0;
   f_session=fopen(SESSION_FILENAME,"wb");
   if(!f_session)
   {
+#ifndef DISABLED_FOR_FRAMAC
     log_critical("Can't create photorec.ses file: %s\n",strerror(errno));
+#endif
+    /*@ assert \valid_read(list_free_space); */
+    /*@ assert valid_ph_param(params); */
+    /*@ assert \valid_read(options); */
     return -1;
   }
-  if(params!=NULL)
+#ifndef DISABLED_FOR_FRAMAC
   {
     struct td_list_head *free_walker = NULL;
     unsigned int i;
@@ -182,11 +225,14 @@ int session_save(alloc_data_t *list_free_space, struct ph_param *params,  const 
     {
       log_trace("session_save\n");
     }
-    fprintf(f_session,"#%u\n%s %s,%u,",
-	(unsigned int)time(NULL), params->disk->device, params->disk->arch->part_name_option, params->partition->order);
+    fprintf(f_session,"#%lu\n%s %s,%u,",
+	(unsigned long int)time(NULL), params->disk->device, params->disk->arch->part_name_option, params->partition->order);
     if(params->blocksize>0)
       fprintf(f_session,"blocksize,%u,", params->blocksize);
     fprintf(f_session,"fileopt,");
+    /*@
+      @ loop assigns i, disable, enable, enable_by_default;
+      @*/
     for(i=0;files_enable[i].file_hint!=NULL;i++)
     {
       if(files_enable[i].enable==0)
@@ -288,7 +334,7 @@ int session_save(alloc_data_t *list_free_space, struct ph_param *params,  const 
       case STATUS_QUIT:
         break;
     }
-    if(params->status!=STATUS_FIND_OFFSET && params->offset!=-1)
+    if(params->status!=STATUS_FIND_OFFSET && params->offset!=PH_INVALID_OFFSET)
       fprintf(f_session, "%llu,",
 	  (long long unsigned)(params->offset/params->disk->sector_size));
     fprintf(f_session,"inter\n");
@@ -301,6 +347,7 @@ int session_save(alloc_data_t *list_free_space, struct ph_param *params,  const 
 	  (long long unsigned)(current_free_space->end/params->disk->sector_size));
     }
   }
+#endif
   { /* Reserve some space */
     int res;
     char *buffer;
@@ -311,10 +358,16 @@ int session_save(alloc_data_t *list_free_space, struct ph_param *params,  const 
     if(res<SESSION_MAXSIZE)
     {
       fclose(f_session);
+      /*@ assert \valid_read(list_free_space); */
+      /*@ assert valid_ph_param(params); */
+      /*@ assert \valid_read(options); */
       return -1;
     }
   }
   fclose(f_session);
+  /*@ assert \valid_read(list_free_space); */
+  /*@ assert valid_ph_param(params); */
+  /*@ assert \valid_read(options); */
   return 0;
 }
 

@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_bin)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,6 +32,7 @@
 #include "filegen.h"
 #include "common.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_bin(file_stat_t *file_stat);
 
 const file_hint_t file_hint_bin= {
@@ -51,14 +53,22 @@ struct ticket_header
   char	   data[9];	// TaTickets
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires buffer_size >= sizeof(struct ticket_header);
+  @ requires separation: \separated(&file_hint_bin, buffer, file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_bin(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct ticket_header *hdr=(const struct ticket_header *)buffer;
-  if(le32(hdr->size) < 65)
+  const unsigned int size=le32(hdr->size);
+  if(size < 65)
     return 0;
   reset_file_recovery(file_recovery_new);
   file_recovery_new->extension="Ticket.bin";
-  file_recovery_new->calculated_file_size=(uint64_t)le32(hdr->size);
+  file_recovery_new->calculated_file_size=size;
   file_recovery_new->data_check=&data_check_size;
   file_recovery_new->file_check=&file_check_size;
   file_recovery_new->min_filesize=65;
@@ -72,3 +82,4 @@ static void register_header_check_bin(file_stat_t *file_stat)
     'i' , 'c' , 'k' , 'e' , 't' , 's' };
   register_header_check(6, bin_header, sizeof(bin_header), &header_check_bin, file_stat);
 }
+#endif

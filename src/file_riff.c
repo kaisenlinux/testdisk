@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_riff)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -30,11 +31,12 @@
 #include "types.h"
 #include "filegen.h"
 #include "common.h"
+#include "file_riff.h"
 #ifdef DEBUG_RIFF
 #include "log.h"
 #endif
 
-data_check_t data_check_avi_stream(const unsigned char *buffer, const unsigned int buffer_size, file_recovery_t *file_recovery);
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_riff(file_stat_t *file_stat);
 
 const file_hint_t file_hint_riff= {
@@ -57,10 +59,10 @@ typedef struct {
   uint32_t dwSize;
   uint32_t dwFourCC;
 //  char data[dwSize-4];
-} riff_list_header;
+} riff_list_header_t;
 
 #ifdef DEBUG_RIFF
-static void log_riff_list(const uint64_t offset, const unsigned int depth, const riff_list_header *list_header)
+static void log_riff_list(const uint64_t offset, const unsigned int depth, const riff_list_header_t *list_header)
 {
   unsigned int i;
   log_info("0x%08lx - 0x%08lx ", offset, offset + 8 - 1 + le32(list_header->dwSize));
@@ -78,7 +80,7 @@ static void log_riff_list(const uint64_t offset, const unsigned int depth, const
       le32(list_header->dwSize));
 }
 
-static void log_riff_chunk(const uint64_t offset, const unsigned int depth, const riff_list_header *list_header)
+static void log_riff_chunk(const uint64_t offset, const unsigned int depth, const riff_list_header_t *list_header)
 {
   unsigned int i;
   if(le32(list_header->dwSize)==0)
@@ -95,87 +97,168 @@ static void log_riff_chunk(const uint64_t offset, const unsigned int depth, cons
 }
 #endif
 
+/*@
+  @ requires \valid(fr);
+  @ requires valid_file_recovery(fr);
+  @ requires \valid(fr->handle);
+  @ requires \separated(fr, fr->handle, fr->extension, &errno, &Frama_C_entropy_source);
+  @ requires end <= PHOTOREC_MAX_FILE_SIZE;
+  @ decreases 5 - depth;
+  @ ensures  valid_file_recovery(fr);
+  @ ensures  \valid(fr->handle);
+  @ assigns  *fr->handle, errno;
+  @ assigns  fr->offset_error;
+  @ assigns  Frama_C_entropy_source;
+  @*/
 static void check_riff_list(file_recovery_t *fr, const unsigned int depth, const uint64_t start, const uint64_t end)
 {
   uint64_t file_size;
-  riff_list_header list_header;
   if(depth>5)
     return;
+  /*@
+    @ loop invariant valid_file_recovery(fr);
+    @ loop invariant \valid(fr->handle);
+    @ loop assigns *fr->handle, errno;
+    @ loop assigns fr->offset_error;
+    @ loop assigns Frama_C_entropy_source;
+    @ loop assigns file_size;
+    @ loop variant end - file_size;
+    @*/
   for(file_size=start; file_size < end;)
   {
+    char buf[sizeof(riff_list_header_t)];
+    uint64_t next_fs;
+    const riff_list_header_t *list_header=(const riff_list_header_t *)&buf;
     if(my_fseek(fr->handle, file_size, SEEK_SET)<0)
     {
       fr->offset_error=file_size;
       return;
     }
-    if (fread(&list_header, sizeof(list_header), 1, fr->handle)!=1)
+    if (fread(buf, sizeof(buf), 1, fr->handle)!=1)
     {
       fr->offset_error=file_size;
       return;
     }
-    if(memcmp(&list_header.dwList, "LIST", 4) == 0)
+#if defined(__FRAMAC__)
+    Frama_C_make_unknown(buf, sizeof(buf));
+#endif
+    /*@ assert \initialized((char *)list_header+ (0 .. sizeof(riff_list_header_t)-1)); */
+    next_fs=file_size + (uint64_t)8 + le32(list_header->dwSize);
+    /*@ assert next_fs > file_size; */
+    if(next_fs > end)
+    {
+      fr->offset_error=file_size;
+      return;
+    }
+    /*@ assert valid_file_recovery(fr); */
+    if(memcmp(&list_header->dwList, "LIST", 4) == 0)
     {
 #ifdef DEBUG_RIFF
-      log_riff_list(file_size, depth, &list_header);
+      log_riff_list(file_size, depth, list_header);
 #endif
-      check_riff_list(fr, depth+1, file_size + sizeof(list_header), file_size + 8 - 1 + le32(list_header.dwSize));
+      check_riff_list(fr, depth+1, file_size + sizeof(riff_list_header_t), next_fs);
     }
     else
     {
 #ifdef DEBUG_RIFF
       /* It's a chunk */
-      log_riff_chunk(file_size, depth, &list_header);
+      log_riff_chunk(file_size, depth, list_header);
 #endif
     }
-    file_size += (uint64_t)8 + le32(list_header.dwSize);
     /* align to word boundary */
-    file_size += (file_size&1);
+#ifdef __FRAMAC__
+    file_size = (next_fs & 1 == 0 ? next_fs : next_fs + 1);
+#else
+    file_size = (next_fs+1) & ~(uint64_t)1;
+#endif
+    /*@ assert file_size >= next_fs; */
   }
 }
 
+/*@
+  @ requires fr->file_check == &file_check_avi;
+  @ requires valid_file_check_param(fr);
+  @ ensures  valid_file_check_result(fr);
+  @ assigns *fr->handle, errno, fr->file_size;
+  @ assigns fr->offset_error, fr->offset_ok;
+  @ assigns Frama_C_entropy_source;
+  @*/
 static void file_check_avi(file_recovery_t *fr)
 {
   fr->file_size = 0;
   fr->offset_error=0;
   fr->offset_ok=0;
-  while(fr->file_size!=fr->calculated_file_size)
+  /*@
+    @ loop assigns *fr->handle, errno, fr->file_size;
+    @ loop assigns fr->offset_error, fr->offset_ok;
+    @ loop assigns Frama_C_entropy_source;
+    @ loop variant fr->calculated_file_size - fr->file_size;
+    @*/
+  while(fr->file_size < fr->calculated_file_size)
   {
     const uint64_t file_size=fr->file_size;
-    riff_list_header list_header;
+    uint64_t calculated_file_size;
+    char buffer[sizeof(riff_list_header_t)];
+    const riff_list_header_t *list_header=(const riff_list_header_t *)&buffer;
     if(my_fseek(fr->handle, fr->file_size, SEEK_SET)<0)
     {
       fr->file_size=0;
       return ;
     }
-    if (fread(&list_header, sizeof(list_header), 1, fr->handle)!=1)
+    if (fread(&buffer, sizeof(buffer), 1, fr->handle)!=1)
     {
       fr->file_size=0;
       return;
     }
-#ifdef DEBUG_RIFF
-    log_riff_list(file_size, 0, &list_header);
+#if defined(__FRAMAC__)
+    Frama_C_make_unknown(&buffer, sizeof(buffer));
 #endif
-    if(memcmp(&list_header.dwList, "RIFF", 4) != 0)
+#ifdef DEBUG_RIFF
+    log_riff_list(file_size, 0, list_header);
+#endif
+    if(memcmp(&list_header->dwList, "RIFF", 4) != 0)
     {
       fr->offset_error=fr->file_size;
       return;
     }
-    check_riff_list(fr, 1, file_size + sizeof(list_header), file_size + 8 - 1 + le32(list_header.dwSize));
+    calculated_file_size=file_size + 8 + le32(list_header->dwSize);
+    /*@ assert calculated_file_size > file_size; */
+    /*@ assert calculated_file_size > fr->file_size; */
+    if(calculated_file_size > PHOTOREC_MAX_FILE_SIZE)
+    {
+      fr->file_size=0;
+      return;
+    }
+    /*@ assert calculated_file_size <= PHOTOREC_MAX_FILE_SIZE; */
+    check_riff_list(fr, 1, file_size + sizeof(riff_list_header_t), calculated_file_size);
     if(fr->offset_error > 0)
     {
       fr->file_size=0;
       return;
     }
-    fr->file_size=file_size + 8 + le32(list_header.dwSize);
+    fr->file_size=calculated_file_size;
   }
 }
 
+/*@
+  @ requires file_recovery->data_check==&data_check_avi;
+  @ requires valid_data_check_param(buffer, buffer_size, file_recovery);
+  @ ensures  valid_data_check_result(\result, file_recovery);
+  @ assigns file_recovery->calculated_file_size;
+  @*/
 static data_check_t data_check_avi(const unsigned char *buffer, const unsigned int buffer_size, file_recovery_t *file_recovery)
 {
+  /*@ assert file_recovery->calculated_file_size <= PHOTOREC_MAX_FILE_SIZE; */
+  /*@ assert file_recovery->file_size <= PHOTOREC_MAX_FILE_SIZE; */
+  /*@
+    @ loop assigns file_recovery->calculated_file_size;
+    @ loop variant file_recovery->file_size + buffer_size/2 - (file_recovery->calculated_file_size + 12);
+    @*/
   while(file_recovery->calculated_file_size + buffer_size/2  >= file_recovery->file_size &&
-      file_recovery->calculated_file_size + 12 < file_recovery->file_size + buffer_size/2)
+      file_recovery->calculated_file_size + 12 <= file_recovery->file_size + buffer_size/2)
   {
-    const unsigned int i=file_recovery->calculated_file_size - file_recovery->file_size + buffer_size/2;
+    const unsigned int i=file_recovery->calculated_file_size + buffer_size/2 - file_recovery->file_size;
+    /*@ assert 0 <= i <= buffer_size - 12; */
     const riff_chunk_header *chunk_header=(const riff_chunk_header*)&buffer[i];
     if(memcmp(&buffer[i], "RIFF", 4)==0 && memcmp(&buffer[i+8], "AVIX", 4)==0)
       file_recovery->calculated_file_size += (uint64_t)8 + le32(chunk_header->dwSize);
@@ -187,10 +270,17 @@ static data_check_t data_check_avi(const unsigned char *buffer, const unsigned i
 
 data_check_t data_check_avi_stream(const unsigned char *buffer, const unsigned int buffer_size, file_recovery_t *file_recovery)
 {
+  /*@ assert file_recovery->calculated_file_size <= PHOTOREC_MAX_FILE_SIZE; */
+  /*@ assert file_recovery->file_size <= PHOTOREC_MAX_FILE_SIZE; */
+  /*@
+    @ loop assigns file_recovery->calculated_file_size;
+    @ loop variant file_recovery->file_size + buffer_size/2 - (file_recovery->calculated_file_size + 8);
+    @ */
   while(file_recovery->calculated_file_size + buffer_size/2  >= file_recovery->file_size &&
-      file_recovery->calculated_file_size + 8 < file_recovery->file_size + buffer_size/2)
+      file_recovery->calculated_file_size + 8 <= file_recovery->file_size + buffer_size/2)
   {
-    const unsigned int i=file_recovery->calculated_file_size - file_recovery->file_size + buffer_size/2;
+    const unsigned int i=file_recovery->calculated_file_size + buffer_size/2 - file_recovery->file_size;
+    /*@ assert 0 <= i <= buffer_size - 8; */
     const riff_chunk_header *chunk_header=(const riff_chunk_header*)&buffer[i];
     if(buffer[i+2]!='d' || buffer[i+3]!='b')	/* Video Data Binary ?*/
     {
@@ -207,12 +297,13 @@ data_check_t data_check_avi_stream(const unsigned char *buffer, const unsigned i
   return DC_CONTINUE;
 }
 
-static void file_check_size_rifx(file_recovery_t *file_recovery)
-{
-  if(file_recovery->file_size<file_recovery->calculated_file_size)
-    file_recovery->file_size=0;
-}
-
+/*@
+  @ requires buffer_size >= 12;
+  @ requires separation: \separated(&file_hint_riff, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_riff(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   uint64_t size;
@@ -251,7 +342,7 @@ static int header_check_riff(const unsigned char *buffer, const unsigned int buf
   size+=8;
   if(memcmp(&buffer[8],"AVI ",4)==0)
   {
-    const riff_list_header list_movi={
+    const riff_list_header_t list_movi={
       .dwList=be32(0x4c495354),	/* LIST */
       .dwSize=le32(4),
       .dwFourCC=be32(0x6d6f7669)	/* movi */
@@ -259,7 +350,7 @@ static int header_check_riff(const unsigned char *buffer, const unsigned int buf
     reset_file_recovery(file_recovery_new);
     file_recovery_new->extension="avi";
     /* Is it a raw avi stream with Data Binary chunks ? */
-    if(size < buffer_size - 4 &&
+    if(size >= sizeof(list_movi) && size <= buffer_size - 4 &&
 	memcmp(&buffer[size - sizeof(list_movi)], &list_movi, sizeof(list_movi)) ==0 &&
 	buffer[size+2]=='d' &&
 	buffer[size+3]=='b')
@@ -314,13 +405,20 @@ static int header_check_riff(const unsigned char *buffer, const unsigned int buf
   return 1;
 }
 
+/*@
+  @ requires buffer_size >= 12;
+  @ requires separation: \separated(&file_hint_riff, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_rifx(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   if(memcmp(&buffer[8],"Egg!",4)==0)
   {
     /* After Effects */
     reset_file_recovery(file_recovery_new);
-    file_recovery_new->file_check=&file_check_size_rifx;
+    file_recovery_new->file_check=&file_check_size_min;
     file_recovery_new->calculated_file_size=(uint64_t)buffer[7]+(((uint64_t)buffer[6])<<8)+(((uint64_t)buffer[5])<<16)+(((uint64_t)buffer[4])<<24)+8;
     file_recovery_new->extension="aep";
     return 1;
@@ -333,3 +431,4 @@ static void register_header_check_riff(file_stat_t *file_stat)
   register_header_check(0, "RIFF", 4, &header_check_riff, file_stat);
   register_header_check(0, "RIFX", 4, &header_check_rifx, file_stat);
 }
+#endif

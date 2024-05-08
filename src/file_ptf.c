@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_ptf)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -30,6 +31,7 @@
 #include "types.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_ptf(file_stat_t *file_stat);
 
 const file_hint_t file_hint_ptf= {
@@ -41,6 +43,13 @@ const file_hint_t file_hint_ptf= {
   .register_header_check=&register_header_check_ptf
 };
 
+/*@
+  @ requires buffer_size >= 0x2d + 9;
+  @ requires separation: \separated(&file_hint_ptf, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_ptf(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   switch(buffer[0x12])
@@ -50,8 +59,6 @@ static int header_check_ptf(const unsigned char *buffer, const unsigned int buff
       file_recovery_new->extension=file_hint_ptf.extension;
       return 1;
     case 5:
-      if(memcmp(&buffer[0x2d], "Pro Tools", 9)!=0)
-	return 0;
       reset_file_recovery(file_recovery_new);
       file_recovery_new->extension="ptx";
       return 1;
@@ -69,3 +76,4 @@ static void register_header_check_ptf(file_stat_t *file_stat)
   };
   register_header_check(0, ptf_header, sizeof(ptf_header), &header_check_ptf, file_stat);
 }
+#endif

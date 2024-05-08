@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_dpx)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -34,6 +35,7 @@
 #include "filegen.h"
 #include "common.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_dpx(file_stat_t *file_stat);
 
 const file_hint_t file_hint_dpx= {
@@ -65,17 +67,25 @@ struct header_dpx
   char 		Reserved[104];    /* reserved field TBD (need to pad) */
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires buffer_size >= sizeof(struct header_dpx);
+  @ requires separation: \separated(&file_hint_dpx, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_dpx(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   static const unsigned char ver10[8]= 	   {'V', '1', '.', '0', 0x00, 0x00, 0x00, 0x00};
   const struct header_dpx *dpx=(const struct header_dpx *)buffer;
+  const unsigned int file_size=be32(dpx->file_size);
   if(memcmp(dpx->vers, ver10, sizeof(ver10))==0)
   {
-    if(be32(dpx->file_size) < 19)
+    if(file_size < sizeof(struct header_dpx))
       return 0;
     reset_file_recovery(file_recovery_new);
     file_recovery_new->extension=file_hint_dpx.extension;
-    file_recovery_new->calculated_file_size=be32(dpx->file_size);
+    file_recovery_new->calculated_file_size=file_size;
     file_recovery_new->data_check=&data_check_size;
     file_recovery_new->file_check=&file_check_size;
     file_recovery_new->time=get_time_from_YYYY_MM_DD_HH_MM_SS(dpx->create_time);
@@ -87,5 +97,8 @@ static int header_check_dpx(const unsigned char *buffer, const unsigned int buff
 static void register_header_check_dpx(file_stat_t *file_stat)
 {
   register_header_check(0, "SDPX", 4, &header_check_dpx, file_stat);
+#ifndef DISABLED_FOR_FRAMAC
   register_header_check(0, "XPDS", 4, &header_check_dpx, file_stat);
+#endif
 }
+#endif

@@ -24,6 +24,14 @@
 #include <config.h>
 #endif
 
+#if defined(__CYGWIN__) || defined(__MINGW32__) || defined(DJGPP) || !defined(HAVE_GETEUID)
+#undef SUDO_BIN
+#endif
+
+#if defined(DISABLED_FOR_FRAMAC)
+#undef HAVE_NCURSES
+#endif
+
 #include <stdio.h>
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
@@ -37,7 +45,7 @@
 #include "types.h"
 #include "common.h"
 #include "intrf.h"
-#ifdef HAVE_NCURSES
+#if defined(HAVE_NCURSES)
 #include "intrfn.h"
 #endif
 #include "dir.h"
@@ -55,8 +63,9 @@
 #include "nodisk.h"
 #include "chgarch.h"
 #include "chgarchn.h"
+#include "autoset.h"
 
-#ifdef HAVE_NCURSES
+#if defined(HAVE_NCURSES)
 #define NBR_DISK_MAX 		(LINES-6-8)
 #define INTER_DISK_X		0
 #define INTER_DISK_Y		(8+NBR_DISK_MAX)
@@ -66,7 +75,7 @@
 extern const arch_fnct_t arch_none;
 
 
-#ifdef HAVE_NCURSES
+#if defined(HAVE_NCURSES)
 static int photorec_disk_selection_ncurses(struct ph_param *params, struct ph_options *options, const list_disk_t *list_disk, alloc_data_t *list_search_space)
 {
   int command;
@@ -104,10 +113,7 @@ static int photorec_disk_selection_ncurses(struct ph_param *params, struct ph_op
     wmove(stdscr,5,0);
     wprintw(stdscr,"comes with ABSOLUTELY NO WARRANTY.");
     wmove(stdscr,7,0);
-    wprintw(stdscr,"Select a media (use Arrow keys, then press Enter):");
-#if defined(KEY_MOUSE) && defined(ENABLE_MOUSE)
-    mousemask(ALL_MOUSE_EVENTS, NULL);
-#endif
+    wprintw(stdscr,"Select a media and choose 'Proceed' using arrow keys:");
     for(i=0,element_disk=list_disk;
 	element_disk!=NULL && i<offset+NBR_DISK_MAX;
 	i++, element_disk=element_disk->next)
@@ -126,10 +132,7 @@ static int photorec_disk_selection_ncurses(struct ph_param *params, struct ph_op
     }
     {
       mvwaddstr(stdscr, INTER_NOTE_Y,0,"Note: ");
-#if defined(__CYGWIN__) || defined(__MINGW32__)
-#else
-#ifndef DJGPP
-#ifdef HAVE_GETEUID
+#if defined(HAVE_GETEUID) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(DJGPP)
       if(geteuid()!=0)
       {
 	if(has_colors())
@@ -141,9 +144,16 @@ static int photorec_disk_selection_ncurses(struct ph_param *params, struct ph_op
 	use_sudo=1;
 #endif
       }
+      else
 #endif
-#endif
-#endif
+      if(current_disk != NULL && current_disk->disk->serial_no != NULL)
+      {
+        if(has_colors())
+          wbkgdset(stdscr,' ' | A_BOLD | COLOR_PAIR(2));
+	wprintw(stdscr, "Serial number %s", current_disk->disk->serial_no);
+        if(has_colors())
+          wbkgdset(stdscr,' ' | COLOR_PAIR(0));
+      }
       wmove(stdscr, INTER_NOTE_Y+1, 0);
       wprintw(stdscr,"Disk capacity must be correctly detected for a successful recovery.");
       wmove(stdscr, INTER_NOTE_Y+2, 0);
@@ -169,39 +179,6 @@ static int photorec_disk_selection_ncurses(struct ph_param *params, struct ph_op
     }
     command = wmenuSelect_ext(stdscr, INTER_NOTE_Y-1, INTER_DISK_Y, INTER_DISK_X, menuMain, 8,
 	menu_options, MENU_HORIZ | MENU_BUTTON | MENU_ACCEPT_OTHERS, &menu,&real_key);
-#if defined(KEY_MOUSE) && defined(ENABLE_MOUSE)
-    if(command == KEY_MOUSE)
-    {
-      MEVENT event;
-      if(getmouse(&event) == OK)
-      {	/* When the user clicks left mouse button */
-	if((event.bstate & BUTTON1_CLICKED) || (event.bstate & BUTTON1_DOUBLE_CLICKED))
-	{
-	  if(event.y >=8 && event.y<8+NBR_DISK_MAX)
-	  {
-	    const int pos_num_old=pos_num;
-	    /* Disk selection */
-	    while(pos_num > event.y-(8-offset) && current_disk->prev!=NULL)
-	    {
-	      current_disk=current_disk->prev;
-	      pos_num--;
-	    }
-	    while(pos_num < event.y-(8-offset) && current_disk->next!=NULL)
-	    {
-	      current_disk=current_disk->next;
-	      pos_num++;
-	    }
-	    if(((event.bstate & BUTTON1_CLICKED) && pos_num==pos_num_old) ||
-		(event.bstate & BUTTON1_DOUBLE_CLICKED))
-	      command='O';
-	  }
-	  else
-	    command = menu_to_command(INTER_NOTE_Y-1, INTER_DISK_Y, INTER_DISK_X, menuMain, 8,
-		menu_options, MENU_HORIZ | MENU_BUTTON | MENU_ACCEPT_OTHERS, event.y, event.x);
-	}
-      }
-    }
-#endif
     switch(command)
     {
       case KEY_UP:
@@ -240,6 +217,7 @@ static int photorec_disk_selection_ncurses(struct ph_param *params, struct ph_op
 	  disk_t *disk=current_disk->disk;
 	  const int hpa_dco=is_hpa_or_dco(disk);
 	  autodetect_arch(disk, &arch_none);
+	  autoset_unit(disk);
 	  params->disk=disk;
 	  if((hpa_dco==0 || interface_check_hidden_ncurses(disk, hpa_dco)==0) &&
 	      (options->expert == 0 ||
@@ -267,18 +245,20 @@ int do_curses_photorec(struct ph_param *params, struct ph_options *options, cons
   static alloc_data_t list_search_space={
     .list = TD_LIST_HEAD_INIT(list_search_space.list)
   };
-  if(params->cmd_device==NULL)
+  const int resume_session=(params->cmd_device!=NULL && strcmp(params->cmd_device,"resume")==0);
+#ifndef DISABLED_FOR_FRAMAC
+  if(params->cmd_device==NULL || resume_session!=0)
   {
     char *saved_device=NULL;
     char *saved_cmd=NULL;
     session_load(&saved_device, &saved_cmd,&list_search_space);
     if(saved_device!=NULL && saved_cmd!=NULL && !td_list_empty(&list_search_space.list)
-#ifdef HAVE_NCURSES
-	&& ask_confirmation("Continue previous session ? (Y/N)")!=0
+#if defined(HAVE_NCURSES)
+	&& ( resume_session!=0 || ask_confirmation("Continue previous session ? (Y/N)")!=0)
 #endif
       )
     {
-#ifdef HAVE_NCURSES
+#if defined(HAVE_NCURSES)
       {
 	WINDOW *window=newwin(LINES, COLS, 0, 0);	/* full screen */
 	aff_copy(window);
@@ -302,18 +282,23 @@ int do_curses_photorec(struct ph_param *params, struct ph_options *options, cons
       rename("photorec.ses", "photorec.se2");
     }
   }
+#endif
   if(params->cmd_device!=NULL && params->cmd_run!=NULL)
   {
+    /*@ assert valid_read_string(params->cmd_run); */
     params->disk=photorec_disk_selection_cli(params->cmd_device, list_disk, &list_search_space);
-#ifdef HAVE_NCURSES
+    /*@ assert params->disk == \null || valid_disk(params->disk); */
+#if defined(HAVE_NCURSES)
     if(params->disk==NULL)
     {
       log_critical("No disk found\n");
       return intrf_no_disk_ncurses("PhotoRec");
     }
+    /*@ assert valid_disk(params->disk); */
     if(change_arch_type_cli(params->disk, options->verbose, &params->cmd_run)==0 ||
 	change_arch_type_ncurses(params->disk, options->verbose)==0)
     {
+      autoset_unit(params->disk);
       menu_photorec(params, options, &list_search_space);
     }
     return 0;
@@ -321,14 +306,19 @@ int do_curses_photorec(struct ph_param *params, struct ph_options *options, cons
     if(params->disk==NULL)
     {
       log_critical("No disk found\n");
+      /*@ assert params->cmd_run == \null || valid_read_string(params->cmd_run); */
       return 0;
     }
+    /*@ assert valid_disk(params->disk); */
     change_arch_type_cli(params->disk, options->verbose, &params->cmd_run);
+    autoset_unit(params->disk);
     menu_photorec(params, options, &list_search_space);
+    /*@ assert params->cmd_run == \null || valid_read_string(params->cmd_run); */
     return 0;
 #endif
   }
-#ifdef HAVE_NCURSES
+  /*@ assert params->cmd_run == \null || valid_read_string(params->cmd_run); */
+#if defined(HAVE_NCURSES)
   return photorec_disk_selection_ncurses(params, options, list_disk, &list_search_space);
 #else
   return 0;

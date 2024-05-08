@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_pzf)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -30,6 +31,7 @@
 #include "types.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_pzf(file_stat_t *file_stat);
 
 const file_hint_t file_hint_pzf= {
@@ -41,6 +43,13 @@ const file_hint_t file_hint_pzf= {
   .register_header_check=&register_header_check_pzf
 };
 
+/*@
+  @ requires file_recovery->file_check == &file_check_pzf;
+  @ requires valid_file_check_param(file_recovery);
+  @ ensures  valid_file_check_result(file_recovery);
+  @ assigns *file_recovery->handle, errno, file_recovery->file_size;
+  @ assigns Frama_C_entropy_source;
+  @*/
 static void file_check_pzf(file_recovery_t *file_recovery)
 {
   const unsigned char pzf_footer[17]= {
@@ -51,6 +60,12 @@ static void file_check_pzf(file_recovery_t *file_recovery)
   file_search_footer(file_recovery, pzf_footer, sizeof(pzf_footer), 0);
 }
 
+/*@
+  @ requires separation: \separated(&file_hint_pzf, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_pzf(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   reset_file_recovery(file_recovery_new);
@@ -66,3 +81,4 @@ static void register_header_check_pzf(file_stat_t *file_stat)
   };
   register_header_check(0, pzf_header, sizeof(pzf_header), &header_check_pzf, file_stat);
 }
+#endif

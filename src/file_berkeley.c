@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_berkeley)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -30,6 +31,7 @@
 #include "types.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_berkeley_le(file_stat_t *file_stat);
 
 const file_hint_t file_hint_berkeley= {
@@ -41,6 +43,12 @@ const file_hint_t file_hint_berkeley= {
   .register_header_check=&register_header_check_berkeley_le
 };
 
+/*@
+  @ requires separation: \separated(&file_hint_berkeley, buffer, file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_berkeley_le(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   reset_file_recovery(file_recovery_new);
@@ -68,7 +76,10 @@ static void register_header_check_berkeley_le(file_stat_t *file_stat)
   static unsigned char berkeley_db_btree_8[8]={0x62, 0x31, 0x05, 0x00, 0x08, 0x00, 0x00, 0x00};
   static unsigned char berkeley_db_btree_9[8]={0x62, 0x31, 0x05, 0x00, 0x09, 0x00, 0x00, 0x00};
   register_header_check(0xC, berkeley_db_hash_8, 8, &header_check_berkeley_le, file_stat);
+#ifndef DISABLED_FOR_FRAMAC
   register_header_check(0xC, berkeley_db_hash_9, 8, &header_check_berkeley_le, file_stat);
   register_header_check(0xC, berkeley_db_btree_8, 8, &header_check_berkeley_le, file_stat);
   register_header_check(0xC, berkeley_db_btree_9, 8, &header_check_berkeley_le, file_stat);
+#endif
 }
+#endif

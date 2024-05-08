@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_mfg)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -30,6 +31,7 @@
 #include "types.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_mfg(file_stat_t *file_stat);
 
 const file_hint_t file_hint_mfg= {
@@ -41,6 +43,14 @@ const file_hint_t file_hint_mfg= {
   .register_header_check=&register_header_check_mfg
 };
 
+/*@
+  @ requires file_recovery->file_check == &file_check_mfg;
+  @ requires valid_file_check_param(file_recovery);
+  @ ensures  valid_file_check_result(file_recovery);
+  @ assigns *file_recovery->handle, errno, file_recovery->file_size;
+  @ assigns Frama_C_entropy_source;
+  @
+  @*/
 static void file_check_mfg(file_recovery_t *file_recovery)
 {
   const unsigned char mfg_footer[11]= {
@@ -49,6 +59,12 @@ static void file_check_mfg(file_recovery_t *file_recovery)
   file_search_footer(file_recovery, mfg_footer, sizeof(mfg_footer), 1);
 }
 
+/*@
+  @ requires separation: \separated(&file_hint_mfg, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_mfg(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   reset_file_recovery(file_recovery_new);
@@ -65,3 +81,4 @@ static void register_header_check_mfg(file_stat_t *file_stat)
 
   register_header_check(0, mfg_header,sizeof(mfg_header), &header_check_mfg, file_stat);
 }
+#endif

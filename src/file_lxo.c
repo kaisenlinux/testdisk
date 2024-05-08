@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_lxo)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,6 +32,7 @@
 #include "common.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_lxo(file_stat_t *file_stat);
 
 const file_hint_t file_hint_lxo= {
@@ -49,10 +51,17 @@ struct lxo_header
   char type[3];
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires buffer_size >= sizeof(struct lxo_header);
+  @ requires separation: \separated(&file_hint_lxo, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_lxo(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct lxo_header *header=(const struct lxo_header *)buffer;
-  const uint64_t size=be32(header->size) + 8;
+  const uint64_t size=(uint64_t)be32(header->size) + 8;
   if(size < sizeof(struct lxo_header))
     return 0;
   if(buffer[8]=='L' && buffer[9]=='X' && buffer[10]=='O')
@@ -83,3 +92,4 @@ static void register_header_check_lxo(file_stat_t *file_stat)
   };
   register_header_check(0, lxo_header, sizeof(lxo_header), &header_check_lxo, file_stat);
 }
+#endif

@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_qdf)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -30,7 +31,11 @@
 #include "types.h"
 #include "filegen.h"
 
+#if !defined(SINGLE_FORMAT)
 extern const file_hint_t file_hint_doc;
+#endif
+
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_qdf(file_stat_t *file_stat);
 
 const file_hint_t file_hint_qdf= {
@@ -42,15 +47,22 @@ const file_hint_t file_hint_qdf= {
   .register_header_check=&register_header_check_qdf
 };
 
+/*@
+  @ requires separation: \separated(&file_hint_qdf, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @*/
 static int header_check_qdf(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
+#if !defined(SINGLE_FORMAT)
   if(file_recovery->file_stat != NULL &&
-      file_recovery->file_stat->file_hint==&file_hint_doc &&
-      strstr(file_recovery->filename, ".qdf-backup")!=NULL)
+      file_recovery->file_stat->file_hint==&file_hint_doc)
+//      && strstr(file_recovery->filename, ".qdf-backup")!=NULL)
   {
     if(header_ignored_adv(file_recovery, file_recovery_new)==0)
       return 0;
   }
+#endif
   reset_file_recovery(file_recovery_new);
   file_recovery_new->extension=file_hint_qdf.extension;
   return 1;
@@ -61,3 +73,4 @@ static void register_header_check_qdf(file_stat_t *file_stat)
   static const unsigned char qdf_header[6]  = { 0xAC, 0x9E, 0xBD, 0x8F, 0x00, 0x00};
   register_header_check(0, qdf_header, sizeof(qdf_header), &header_check_qdf, file_stat);
 }
+#endif

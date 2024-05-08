@@ -20,7 +20,7 @@
 
  */
 
-
+#if !defined(SINGLE_PARTITION_TYPE) || defined(SINGLE_PARTITION_GPT)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -37,8 +37,7 @@
 #include <uuid.h>
 #elif defined(HAVE_UUID_UUID_H)
 #include <uuid/uuid.h>
-#endif
-#if defined(HAVE_SYS_UUID_H)
+#elif defined(HAVE_SYS_UUID_H)
 #include <sys/uuid.h>
 #endif
 #include "common.h"
@@ -311,3 +310,4 @@ int write_part_gpt(disk_t *disk_car, const list_part_t *list_part, const int ro,
   disk_car->sync(disk_car);
   return 0;
 }
+#endif

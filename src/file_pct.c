@@ -19,6 +19,7 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_pct)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,10 +32,12 @@
 #include "common.h"
 #include "log.h"
 
+#if !defined(SINGLE_FORMAT)
 extern const file_hint_t file_hint_indd;
+#endif
+
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_pct(file_stat_t *file_stat);
-static int header_check_pct(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
-static void file_check_pct(file_recovery_t *file_recovery);
 
 const file_hint_t file_hint_pct= {
   .extension="pct",
@@ -79,6 +82,32 @@ struct pct_file_entry {
   uint32_t Reserved2;		/* 0x24 */
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires file_recovery->file_check == &file_check_pct;
+  @ requires valid_file_check_param(file_recovery);
+  @ ensures  valid_file_check_result(file_recovery);
+  @ assigns  file_recovery->file_size;
+  @*/
+static void file_check_pct(file_recovery_t *file_recovery)
+{
+  uint64_t diff;
+  if(file_recovery->file_size<0x210 ||
+      file_recovery->file_size<file_recovery->min_filesize)
+  {
+    file_recovery->file_size=0;
+    return ;
+  }
+  /*@ assert file_recovery->file_size >= file_recovery->min_filesize; */
+  diff=file_recovery->file_size-file_recovery->min_filesize;
+  file_recovery->file_size=file_recovery->min_filesize + (diff&0xffffffffffff0000);
+}
+
+/*@
+  @ requires buffer_size >= 0x200+sizeof(struct pct_file_entry);
+  @ requires separation: \separated(&file_hint_pct, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @*/
 static int header_check_pct(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct pct_file_entry *pct=(const struct pct_file_entry *)(&buffer[0x200]);
@@ -94,16 +123,19 @@ static int header_check_pct(const unsigned char *buffer, const unsigned int buff
 	be16(pct->VersionOperator)==0x0011 &&
 	be16(pct->VersionNumber)==0x02ff)
   {
+    const unsigned int min_filesize=(buffer[0x200]<<8)+buffer[0x201];
+#if !defined(SINGLE_FORMAT)
     if(file_recovery->file_stat != NULL &&
 	file_recovery->file_stat->file_hint==&file_hint_indd)
     {
       if(header_ignored_adv(file_recovery, file_recovery_new)==0)
 	return 0;
     }
+#endif
     reset_file_recovery(file_recovery_new);
     file_recovery_new->extension=file_hint_pct.extension;
     /* We only have the low 16bits of the filesystem */
-    file_recovery_new->min_filesize=(buffer[0x200]<<8)+buffer[0x201];
+    file_recovery_new->min_filesize=(min_filesize > 0x200+sizeof(struct pct_file_entry) ? min_filesize : 0x200+sizeof(struct pct_file_entry));
     file_recovery_new->file_check=&file_check_pct;
 #ifdef DEBUG_PCT
     log_info("X %u-%u, Y %u-%u\n",
@@ -118,19 +150,9 @@ static int header_check_pct(const unsigned char *buffer, const unsigned int buff
   return 0;
 }
 
-static void file_check_pct(file_recovery_t *file_recovery)
-{
-  if(file_recovery->file_size<0x210 ||
-      file_recovery->file_size<file_recovery->min_filesize)
-  {
-    file_recovery->file_size=0;
-    return ;
-  }
-  file_recovery->file_size-=((file_recovery->file_size-file_recovery->min_filesize)&0xFFFF);
-}
-
 static void register_header_check_pct(file_stat_t *file_stat)
 {
   static const unsigned char pct_header[6]= { 0x00, 0x11, 0x02, 0xff, 0x0c, 0x00};
   register_header_check(0x20a, pct_header,sizeof(pct_header), &header_check_pct, file_stat);
 }
+#endif

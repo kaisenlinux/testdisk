@@ -36,9 +36,14 @@
 #include "types.h"
 #include "common.h"
 #include "fnctdsk.h"
+#if !defined(DISABLED_FOR_FRAMAC)
 #include "analyse.h"
+#endif
 #include "lang.h"
 #include "intrf.h"
+#include "fat_common.h"
+#if !defined(DISABLED_FOR_FRAMAC)
+#include "apfs.h"
 #include "bfs.h"
 #include "bsd.h"
 #include "btrfs.h"
@@ -46,7 +51,6 @@
 #include "exfat.h"
 #include "ext2.h"
 #include "fat.h"
-#include "fat_common.h"
 #include "fatx.h"
 #include "f2fs_fs.h"
 #include "f2fs.h"
@@ -73,22 +77,80 @@
 #include "vmfs.h"
 #include "wbfs.h"
 #include "zfs.h"
+#endif
 #include "log.h"
 
+/*@
+  @ requires \valid(disk_car);
+  @ requires \valid(partition);
+  @*/
 static int check_part_none(disk_t *disk_car, const int verbose,partition_t *partition,const int saveheader);
+
+/*@
+  @ requires \valid_read(buffer + (0 .. 0x200-1));
+  @ requires \valid(geometry);
+  @ requires \separated(buffer + (0 .. 0x200-1), geometry);
+  @ assigns geometry->sectors_per_head, geometry->heads_per_cylinder, geometry->bytes_per_sector;
+  @*/
 static int get_geometry_from_nonembr(const unsigned char *buffer, const int verbose, CHSgeometry_t *geometry);
+
+/*@
+  @ requires \valid(disk_car);
+  @ requires valid_disk(disk_car);
+  @ ensures  valid_list_part(\result);
+  @*/
 static list_part_t *read_part_none(disk_t *disk_car, const int verbose, const int saveheader);
+
+/*@
+  @ requires \valid_read(disk_car);
+  @ assigns \nothing;
+  @*/
 static list_part_t *init_part_order_none(const disk_t *disk_car, list_part_t *list_part);
+
+/*@
+  @ requires \valid_read(disk_car);
+  @ assigns \nothing;
+  @*/
 static void set_next_status_none(const disk_t *disk_car, partition_t *partition);
-static int test_structure_none(list_part_t *list_part);
-static int is_part_known_none(const partition_t *partition);
-static void init_structure_none(const disk_t *disk_car,list_part_t *list_part, const int verbose);
-static const char *get_partition_typename_none_aux(const unsigned int part_type_none);
+
+/*@
+  @ requires list_part == \null || \valid_read(list_part);
+  @ assigns \nothing;
+  @*/
+static int test_structure_none(const list_part_t *list_part);
+
+/*@
+  @ requires \valid(partition);
+  @ assigns partition->upart_type;
+  @*/
 static int set_part_type_none(partition_t *partition, unsigned int part_type);
+
+/*@
+  @ requires \valid_read(partition);
+  @ assigns \nothing;
+  @*/
+static int is_part_known_none(const partition_t *partition);
+
+/*@
+  @ requires \valid_read(disk_car);
+  @ requires list_part==\null || \valid(list_part);
+  @*/
+static void init_structure_none(const disk_t *disk_car,list_part_t *list_part, const int verbose);
+
+/*@
+  @ requires \valid_read(partition);
+  @ assigns \nothing;
+  @*/
 static unsigned int get_part_type_none(const partition_t *partition);
+
+/*@
+  @ requires \valid_read(partition);
+  @ assigns \nothing;
+  @*/
 static const char *get_partition_typename_none(const partition_t *partition);
 
 static const struct systypes none_sys_types[] = {
+  {UP_APFS,	"APFS"},
   {UP_BEOS,	"BeFS"},
   {UP_BTRFS,	"btrfs"},
   {UP_CRAMFS,	"CramFS"},
@@ -178,6 +240,7 @@ static int get_geometry_from_nonembr(const unsigned char *buffer, const int verb
   {
     /* Ugly hack to get geometry from FAT and NTFS */
     const struct fat_boot_sector *fat_header=(const struct fat_boot_sector *)buffer;
+    /*@ assert \valid_read(fat_header); */
     if(le16(fat_header->marker)==0xAA55)
     {
       if(le16(fat_header->secs_track)>0 && le16(fat_header->secs_track)<=63 &&
@@ -203,6 +266,7 @@ static list_part_t *read_part_none(disk_t *disk, const int verbose, const int sa
   partition=partition_new(&arch_none);
   buffer_disk=(unsigned char *)MALLOC(16*DEFAULT_SECTOR_SIZE);
   partition->part_size=disk->disk_size;
+#if !defined(DISABLED_FOR_FRAMAC)
   if(recover_MD_from_partition(disk, partition, verbose)==0)
     res=1;
   else
@@ -287,6 +351,7 @@ static list_part_t *read_part_none(disk_t *disk, const int verbose, const int sa
       }
     }
   }
+#endif
   free(buffer_disk);
   if(res<=0)
     partition_reset(partition,&arch_none);
@@ -295,9 +360,12 @@ static list_part_t *read_part_none(disk_t *disk, const int verbose, const int sa
   partition->order=NO_ORDER;
   partition->status=STATUS_PRIM;
   screen_buffer_reset();
-  disk->arch->check_part(disk, verbose,partition,saveheader);
+  check_part_none(disk, verbose,partition,saveheader);
+#ifndef DISABLED_FOR_FRAMAC
   aff_part_buffer(AFF_PART_ORDER|AFF_PART_STATUS,disk, partition);
+#endif
   list_part=insert_new_partition(NULL, partition, 0, &insert_error);
+  /*@ assert valid_list_part(list_part); */
   if(insert_error>0)
     free(partition);
   return list_part;
@@ -313,7 +381,7 @@ static void set_next_status_none(const disk_t *disk_car, partition_t *partition)
 {
 }
 
-static int test_structure_none(list_part_t *list_part)
+static int test_structure_none(const list_part_t *list_part)
 {
   return 0;
 }
@@ -334,6 +402,8 @@ static void init_structure_none(const disk_t *disk_car,list_part_t *list_part, c
   list_part_t *element;
   for(element=list_part;element!=NULL;element=element->next)
   {
+    /*@ assert \valid_read(element); */
+    /*@ assert \valid(element->part); */
     element->part->status=STATUS_PRIM;
   }
 }
@@ -341,8 +411,12 @@ static void init_structure_none(const disk_t *disk_car,list_part_t *list_part, c
 static int check_part_none(disk_t *disk_car,const int verbose,partition_t *partition, const int saveheader)
 {
   int ret=0;
+#if !defined(DISABLED_FOR_FRAMAC)
   switch(partition->upart_type)
   {
+    case UP_APFS:
+      ret=check_APFS(disk_car, partition);
+      break;
     case UP_BEOS:
       ret=check_BeFS(disk_car,partition);
       break;
@@ -471,18 +545,32 @@ static int check_part_none(disk_t *disk_car,const int verbose,partition_t *parti
     case UP_UNK:
       break;
   }
+#endif
   return ret;
 }
 
+/*@
+  @ assigns \nothing;
+  @*/
 static const char *get_partition_typename_none_aux(const unsigned int part_type_none)
 {
-  int i;
+  unsigned int i;
+  /*@
+    @ loop assigns i;
+    @ loop variant sizeof(none_sys_types)/sizeof(struct systypes) - i;
+    @*/
   for (i=0; none_sys_types[i].name!=NULL; i++)
+  {
     if (none_sys_types[i].part_type == part_type_none)
       return none_sys_types[i].name;
+  }
   return NULL;
 }
 
+/*@
+  @ requires \valid_read(partition);
+  @ assigns \nothing;
+  @*/
 static const char *get_partition_typename_none(const partition_t *partition)
 {
   return get_partition_typename_none_aux(partition->upart_type);

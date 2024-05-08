@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_psf)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -30,6 +31,7 @@
 #include "types.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_psf(file_stat_t *file_stat);
 
 const file_hint_t file_hint_psf= {
@@ -41,8 +43,15 @@ const file_hint_t file_hint_psf= {
   .register_header_check=&register_header_check_psf
 };
 
+/*@
+  @ requires buffer_size >= 32;
+  @ requires separation: \separated(&file_hint_psf, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @*/
 static int header_check_psf(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
+  const uint64_t size=((uint64_t)buffer[28]<<24)+((uint64_t)buffer[29]<<16)+((uint64_t)buffer[30]<<8)+((uint64_t)buffer[31]<<0)+272;
   if(file_recovery->file_stat!=NULL &&
       file_recovery->file_stat->file_hint==&file_hint_psf)
   {
@@ -51,7 +60,7 @@ static int header_check_psf(const unsigned char *buffer, const unsigned int buff
   }
   reset_file_recovery(file_recovery_new);
   file_recovery_new->extension=file_hint_psf.extension;
-  file_recovery_new->calculated_file_size=((uint64_t)buffer[28]<<24)+((uint64_t)buffer[29]<<16)+((uint64_t)buffer[30]<<8)+((uint64_t)buffer[31]<<0) + 272;
+  file_recovery_new->calculated_file_size=size;
   file_recovery_new->data_check=&data_check_size;
   file_recovery_new->file_check=&file_check_size;
   return 1;
@@ -61,3 +70,4 @@ static void register_header_check_psf(file_stat_t *file_stat)
 {
   register_header_check(12, "PSD5RDOC", 8, &header_check_psf, file_stat);
 }
+#endif

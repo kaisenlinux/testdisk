@@ -23,6 +23,13 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
+
+#if defined(DISABLED_FOR_FRAMAC)
+#undef HAVE_LIBNTFS
+#undef HAVE_LIBNTFS3G
+#endif
+
+#if defined(HAVE_LIBNTFS) || defined(HAVE_LIBNTFS3G)
 #include <stdio.h>
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
@@ -37,15 +44,14 @@
 #include "common.h"
 #include "list.h"
 #include "filegen.h"
+#include "photorec.h"
 #ifdef HAVE_LIBNTFS
 #include <ntfs/attrib.h>
 #endif
 #ifdef HAVE_LIBNTFS3G
 #include <ntfs-3g/attrib.h>
 #endif
-#if defined(HAVE_LIBNTFS) || defined(HAVE_LIBNTFS3G)
 #include "ntfsp.h"
-#endif
 #include "intrf.h"
 #include "dir.h"
 #include "ntfs.h"
@@ -54,7 +60,6 @@
 #include "log.h"
 #include "log_part.h"
 
-#if defined(HAVE_LIBNTFS) || defined(HAVE_LIBNTFS3G)
 #define SIZEOF_BUFFER ((const unsigned int)512)
 
 unsigned int ntfs_remove_used_space(disk_t *disk_car,const partition_t *partition, alloc_data_t *list_search_space)

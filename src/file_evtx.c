@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_evtx)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -47,6 +48,7 @@ struct evtx_header
   uint32_t Checksum;
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_evtx(file_stat_t *file_stat);
 
 const file_hint_t file_hint_evtx= {
@@ -58,6 +60,13 @@ const file_hint_t file_hint_evtx= {
   .register_header_check=&register_header_check_evtx
 };
 
+/*@
+  @ requires buffer_size >= sizeof(struct evtx_header);
+  @ requires separation: \separated(&file_hint_evtx, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_evtx(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct evtx_header *hdr=(const struct evtx_header *)buffer;
@@ -78,3 +87,4 @@ static void register_header_check_evtx(file_stat_t *file_stat)
 {
   register_header_check(0, "ElfFile", 8, &header_check_evtx, file_stat);
 }
+#endif

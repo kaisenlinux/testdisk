@@ -19,6 +19,7 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_ds2)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -33,6 +34,7 @@
 #include "types.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_ds2(file_stat_t *file_stat);
 
 const file_hint_t file_hint_ds2= {
@@ -55,10 +57,21 @@ const file_hint_t file_hint_ds2= {
    Filesize is always a multiple of 512
 */
 
+/*@
+  @ requires buffer_size >= 0x32;
+  @ requires separation: \separated(&file_hint_ds2, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_ds2(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
-  const char *date_asc=(const char *)&buffer[0x26];
+  const unsigned char *date_asc=&buffer[0x26];
   unsigned int i;
+  /*@
+    @ loop assigns i;
+    @ loop variant 24 - i;
+    @ */
   for(i=0; i<24; i++)
     if(!isdigit(date_asc[i]))
       return 0;
@@ -74,3 +87,4 @@ static void register_header_check_ds2(file_stat_t *file_stat)
   static const unsigned char ds2_header[4]= { 0x03, 'd','s','2'};
   register_header_check(0, ds2_header,sizeof(ds2_header), &header_check_ds2, file_stat);
 }
+#endif

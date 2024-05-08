@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_ddf)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -34,6 +35,7 @@
 #include "filegen.h"
 #include "common.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_ddf(file_stat_t *file_stat);
 
 const file_hint_t file_hint_ddf= {
@@ -79,6 +81,14 @@ struct MasterHeader
   char	   m_cRsvdData[120]; // (120) pad to 512 bytes
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires \valid_read(buffer+(0..sizeof(struct MasterHeader)-1));
+  @ requires \valid(file_recovery_new);
+  @ requires separation: \separated(&file_hint_ddf, buffer+(..), file_recovery_new);
+  @ ensures  \result == 1;
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_aux(const unsigned char *buffer, file_recovery_t *file_recovery_new)
 {
   const char *date_asc=(const char *)&buffer[0x3f];
@@ -91,6 +101,13 @@ static int header_check_aux(const unsigned char *buffer, file_recovery_t *file_r
   return 1;
 }
 
+/*@
+  @ requires buffer_size >= sizeof(struct MasterHeader);
+  @ requires separation: \separated(&file_hint_ddf, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_ddf3(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct MasterHeader *h=(const struct MasterHeader *)buffer;
@@ -101,6 +118,13 @@ static int header_check_ddf3(const unsigned char *buffer, const unsigned int buf
   return header_check_aux(buffer, file_recovery_new);
 }
 
+/*@
+  @ requires buffer_size >= sizeof(struct MasterHeader);
+  @ requires separation: \separated(&file_hint_ddf, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_ddf4(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct MasterHeader *h=(const struct MasterHeader *)buffer;
@@ -111,6 +135,13 @@ static int header_check_ddf4(const unsigned char *buffer, const unsigned int buf
   return header_check_aux(buffer, file_recovery_new);
 }
 
+/*@
+  @ requires buffer_size >= sizeof(struct MasterHeader);
+  @ requires separation: \separated(&file_hint_ddf, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_ddf5(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct MasterHeader *h=(const struct MasterHeader *)buffer;
@@ -138,3 +169,4 @@ static void register_header_check_ddf(file_stat_t *file_stat)
   register_header_check(0, ddf4_header, sizeof(ddf4_header), &header_check_ddf4, file_stat);
   register_header_check(0, ddf5_header, sizeof(ddf5_header), &header_check_ddf5, file_stat);
 }
+#endif

@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_fat)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -34,12 +35,10 @@
 #include "common.h"
 #include "filegen.h"
 #include "log.h"
-#include "memmem.h"
-#include "fat.h"
 #include "fat_common.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_fat(file_stat_t *file_stat);
-static int header_check_fat(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
 
 const file_hint_t file_hint_fat= {
   .extension="fat",
@@ -50,26 +49,46 @@ const file_hint_t file_hint_fat= {
   .register_header_check=&register_header_check_fat
 };
 
-static const unsigned char fat_sign[2]= { 0x55, 0xAA};
-
-static void register_header_check_fat(file_stat_t *file_stat)
+/*@
+  @ requires \valid(file_recovery_new);
+  @ requires file_recovery_new->blocksize > 0;
+  @ requires part_size <= 0xffffffff;
+  @ requires sector_size <= 65535;
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
+static int header_check_fat_aux(file_recovery_t *file_recovery_new, const unsigned int part_size, const unsigned int sector_size)
 {
-  register_header_check(0x1fe, fat_sign, sizeof(fat_sign), &header_check_fat, file_stat);
+  reset_file_recovery(file_recovery_new);
+  file_recovery_new->extension=file_hint_fat.extension;
+  file_recovery_new->calculated_file_size=(uint64_t)part_size * sector_size;
+  file_recovery_new->data_check=&data_check_size;
+  file_recovery_new->file_check=&file_check_size;
+  return 1;
 }
 
+/*@
+  @ requires buffer_size >= sizeof(struct fat_boot_sector);
+  @ requires separation: \separated(&file_hint_fat, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_fat(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct fat_boot_sector *fat_header=(const struct fat_boot_sector *)buffer;
   uint64_t start_fat1,start_data,part_size;
   unsigned long int no_of_cluster,fat_length,fat_length_calc;
+  const unsigned int sector_size=fat_sector_size(fat_header);
   if(!(le16(fat_header->marker)==0xAA55
         && (fat_header->ignored[0]==0xeb || fat_header->ignored[0]==0xe9)
         && (fat_header->fats==1 || fat_header->fats==2)))
     return 0;   /* Obviously not a FAT */
   if(!((fat_header->ignored[0]==0xeb && fat_header->ignored[2]==0x90)||fat_header->ignored[0]==0xe9))
     return 0;
-  if(fat_sector_size(fat_header)==0 || fat_sector_size(fat_header)%512!=0)
+  if(sector_size==0 || sector_size%512!=0)
     return 0;
+  /*@ assert sector_size >= 512; */
   switch(fat_header->sectors_per_cluster)
   {
     case 1:
@@ -84,16 +103,19 @@ static int header_check_fat(const unsigned char *buffer, const unsigned int buff
     default:
       return 0;
   }
+  /*@ assert fat_header->sectors_per_cluster != 0; */
   if(fat_header->fats!=1 && fat_header->fats!=2)
     return 0;
+  /*@ assert fat_header->fats==1 || fat_header->fats==2; */
   if(fat_header->media!=0xF0 && fat_header->media<0xF8)
     return 0;
   fat_length=le16(fat_header->fat_length)>0?le16(fat_header->fat_length):le32(fat_header->fat32_length);
   part_size=(fat_sectors(fat_header)>0?fat_sectors(fat_header):le32(fat_header->total_sect));
   start_fat1=le16(fat_header->reserved);
-  start_data=start_fat1+fat_header->fats*fat_length+(get_dir_entries(fat_header)*32+fat_sector_size(fat_header)-1)/fat_sector_size(fat_header);
+  start_data=start_fat1+fat_header->fats*fat_length+(get_dir_entries(fat_header)*32+sector_size-1)/sector_size;
   if(part_size < start_data)
     return 0;
+  /*@ assert part_size >= start_data; */
   no_of_cluster=(part_size-start_data)/fat_header->sectors_per_cluster;
   if(no_of_cluster<4085)
   {
@@ -102,7 +124,7 @@ static int header_check_fat(const unsigned char *buffer, const unsigned int buff
       return 0;
     if((le16(fat_header->fat_length)>256)||(le16(fat_header->fat_length)==0))
       return 0;
-    fat_length_calc=((no_of_cluster+2+fat_sector_size(fat_header)*2/3-1)*3/2/fat_sector_size(fat_header));
+    fat_length_calc=((no_of_cluster+2+sector_size*2/3-1)*3/2/sector_size);
   }
   else if(no_of_cluster<65525)
   {
@@ -111,7 +133,7 @@ static int header_check_fat(const unsigned char *buffer, const unsigned int buff
       return 0;
     if((get_dir_entries(fat_header)==0)||(get_dir_entries(fat_header)%16!=0))
       return 0;
-    fat_length_calc=((no_of_cluster+2+fat_sector_size(fat_header)/2-1)*2/fat_sector_size(fat_header));
+    fat_length_calc=((no_of_cluster+2+sector_size/2-1)*2/sector_size);
   }
   else
   {
@@ -122,16 +144,16 @@ static int header_check_fat(const unsigned char *buffer, const unsigned int buff
       return 0;
     if((le32(fat_header->root_cluster)<2) ||(le32(fat_header->root_cluster)>=2+no_of_cluster))
       return 0;
-    fat_length_calc=((no_of_cluster+2+fat_sector_size(fat_header)/4-1)*4/fat_sector_size(fat_header));
+    fat_length_calc=((no_of_cluster+2+sector_size/4-1)*4/sector_size);
   }
   if(fat_length<fat_length_calc)
     return 0;
-  reset_file_recovery(file_recovery_new);
-  file_recovery_new->extension=file_hint_fat.extension;
-  file_recovery_new->calculated_file_size=(uint64_t)
-    (fat_sectors(fat_header)>0?fat_sectors(fat_header):le32(fat_header->total_sect)) *
-    fat_sector_size(fat_header);
-  file_recovery_new->data_check=&data_check_size;
-  file_recovery_new->file_check=&file_check_size;
-  return 1;
+  return header_check_fat_aux(file_recovery_new, part_size, sector_size);
 }
+
+static void register_header_check_fat(file_stat_t *file_stat)
+{
+  static const unsigned char fat_sign[2]= { 0x55, 0xAA};
+  register_header_check(0x1fe, fat_sign, sizeof(fat_sign), &header_check_fat, file_stat);
+}
+#endif

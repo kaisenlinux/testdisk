@@ -20,7 +20,7 @@
 
  */
 
-
+#if !defined(SINGLE_PARTITION_TYPE) || defined(SINGLE_PARTITION_XBOX)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -45,17 +45,79 @@
 #include "fatx.h"
 #include "log.h"
 
+/*@
+  @ requires \valid(disk_car);
+  @ requires \valid(partition);
+  @*/
 static int check_part_xbox(disk_t *disk_car, const int verbose,partition_t *partition,const int saveheader);
+
+/*@
+  @ requires \valid(disk_car);
+  @ requires valid_disk(disk_car);
+  @*/
+// ensures  valid_list_part(\result);
 static list_part_t *read_part_xbox(disk_t *disk_car, const int verbose, const int saveheader);
+
+/*@
+  @ requires \valid_read(disk_car);
+  @ requires \valid(list_part);
+  @ requires separation: \separated(disk_car, list_part);
+  @*/
 static int write_part_xbox(disk_t *disk_car, const list_part_t *list_part, const int ro , const int verbose);
+
+/*@
+  @ requires \valid(disk_car);
+  @ requires list_part == \null || \valid(list_part);
+  @ requires separation: \separated(disk_car, list_part);
+  @*/
 static list_part_t *init_part_order_xbox(const disk_t *disk_car, list_part_t *list_part);
+
+/*@
+  @ requires \valid_read(disk_car);
+  @ requires \valid(partition);
+  @ requires separation: \separated(disk_car, partition);
+  @ assigns partition->status;
+  @*/
 static void set_next_status_xbox(const disk_t *disk_car, partition_t *partition);
-static int test_structure_xbox(list_part_t *list_part);
+
+/*@
+  @ requires list_part == \null || \valid_read(list_part);
+  @*/
+static int test_structure_xbox(const list_part_t *list_part);
+
+/*@
+  @ requires \valid(partition);
+  @ assigns partition->part_type_xbox;
+  @*/
 static int set_part_type_xbox(partition_t *partition, unsigned int part_type_xbox);
+
+/*@
+  @ requires \valid(partition);
+  @ assigns \nothing;
+  @*/
 static int is_part_known_xbox(const partition_t *partition);
+
+/*@
+  @ requires \valid_read(disk_car);
+  @ requires list_part == \null || \valid(list_part);
+  @*/
 static void init_structure_xbox(const disk_t *disk_car,list_part_t *list_part, const int verbose);
+
+/*@
+  @ requires \valid_read(partition);
+  @ assigns \nothing;
+  @*/
 static const char *get_partition_typename_xbox(const partition_t *partition);
+
+/*@
+  @ assigns \nothing;
+  @*/
 static const char *get_partition_typename_xbox_aux(const unsigned int part_type_xbox);
+
+/*@
+  @ requires \valid_read(partition);
+  @ assigns \nothing;
+  @*/
 static unsigned int get_part_type_xbox(const partition_t *partition);
 
 static const struct systypes xbox_sys_types[] = {
@@ -95,6 +157,7 @@ static list_part_t *read_part_xbox(disk_t *disk_car, const int verbose, const in
 {
   unsigned char buffer[0x800];
   list_part_t *new_list_part=NULL;
+  /*@ assert valid_list_part(new_list_part); */
   screen_buffer_reset();
   if(disk_car->pread(disk_car, &buffer, sizeof(buffer), 0) != sizeof(buffer))
     return new_list_part;
@@ -107,6 +170,9 @@ static list_part_t *read_part_xbox(disk_t *disk_car, const int verbose, const in
       screen_buffer_add("\nBad XBOX partition, invalid signature\n");
       return NULL;
     }
+    /*@
+      @ loop invariant valid_list_part(new_list_part);
+      @*/
     for(i=0;i<sizeof(offsets)/sizeof(uint64_t);i++)
     {
       if(offsets[i]<disk_car->disk_size)
@@ -121,7 +187,7 @@ static list_part_t *read_part_xbox(disk_t *disk_car, const int verbose, const in
 	else
 	  partition->part_size=offsets[i+1]-offsets[i];
 	partition->status=STATUS_PRIM;
-	disk_car->arch->check_part(disk_car,verbose,partition,saveheader);
+	check_part_xbox(disk_car,verbose,partition,saveheader);
 	aff_part_buffer(AFF_PART_ORDER|AFF_PART_STATUS,disk_car,partition);
 	new_list_part=insert_new_partition(new_list_part, partition, 0, &insert_error);
 	if(insert_error>0)
@@ -129,6 +195,7 @@ static list_part_t *read_part_xbox(disk_t *disk_car, const int verbose, const in
       }
     }
   }
+  /*@ assert valid_list_part(new_list_part); */
   return new_list_part;
 }
 
@@ -145,12 +212,16 @@ static list_part_t *init_part_order_xbox(const disk_t *disk_car, list_part_t *li
   return list_part;
 }
 
-list_part_t *add_partition_xbox_cli(disk_t *disk_car,list_part_t *list_part, char **current_cmd)
+list_part_t *add_partition_xbox_cli(const disk_t *disk_car,list_part_t *list_part, char **current_cmd)
 {
   partition_t *new_partition=partition_new(&arch_xbox);
   assert(current_cmd!=NULL);
   new_partition->part_offset=disk_car->sector_size;
   new_partition->part_size=disk_car->disk_size-disk_car->sector_size;
+  /*@
+    @ loop invariant valid_list_part(list_part);
+    @ loop invariant valid_read_string(*current_cmd);
+    @ */
   while(1)
   {
     skip_comma_in_command(current_cmd);
@@ -186,19 +257,23 @@ list_part_t *add_partition_xbox_cli(disk_t *disk_car,list_part_t *list_part, cha
     {
       int insert_error=0;
       list_part_t *new_list_part=insert_new_partition(list_part, new_partition, 0, &insert_error);
+      /*@ assert valid_list_part(new_list_part); */
       if(insert_error>0)
       {
 	free(new_partition);
+	/*@ assert valid_list_part(new_list_part); */
 	return new_list_part;
       }
       new_partition->status=STATUS_PRIM;
       if(test_structure_xbox(list_part)!=0)
 	new_partition->status=STATUS_DELETED;
+      /*@ assert valid_list_part(new_list_part); */
       return new_list_part;
     }
     else
     {
       free(new_partition);
+      /*@ assert valid_list_part(list_part); */
       return list_part;
     }
   }
@@ -212,7 +287,7 @@ static void set_next_status_xbox(const disk_t *disk_car, partition_t *partition)
     partition->status=STATUS_DELETED;
 }
 
-static int test_structure_xbox(list_part_t *list_part)
+static int test_structure_xbox(const list_part_t *list_part)
 { /* Return 1 if bad*/
   list_part_t *new_list_part;
   int res;
@@ -263,7 +338,7 @@ static void init_structure_xbox(const disk_t *disk_car,list_part_t *list_part, c
   }
     for(element=new_list_part;element!=NULL;element=element->next)
       element->part->status=STATUS_PRIM;
-  if(disk_car->arch->test_structure(new_list_part))
+  if(test_structure_xbox(new_list_part))
   {
     for(element=new_list_part;element!=NULL;element=element->next)
       element->part->status=STATUS_DELETED;
@@ -303,6 +378,7 @@ static int check_part_xbox(disk_t *disk_car,const int verbose,partition_t *parti
 static const char *get_partition_typename_xbox_aux(const unsigned int part_type_xbox)
 {
   int i;
+  /*@ loop assigns i; */
   for (i=0; xbox_sys_types[i].name!=NULL; i++)
     if (xbox_sys_types[i].part_type == part_type_xbox)
       return xbox_sys_types[i].name;
@@ -313,3 +389,4 @@ static const char *get_partition_typename_xbox(const partition_t *partition)
 {
   return get_partition_typename_xbox_aux(partition->part_type_xbox);
 }
+#endif

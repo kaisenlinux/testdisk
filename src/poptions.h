@@ -19,13 +19,28 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+
+#ifndef _POPTIONS_H
+#define _POPTIONS_H
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/*@
+  @ requires \valid(current_cmd);
+  @ requires valid_read_string(*current_cmd);
+  @ requires \valid(options);
+  @ requires \separated(options, current_cmd, *current_cmd);
+  @ ensures  valid_read_string(*current_cmd);
+  @ */
 void interface_options_photorec_cli(struct ph_options *options, char**current_cmd);
+
+/*@
+  @ requires \valid_read(options);
+  @ */
 void interface_options_photorec_log(const struct ph_options *options);
 
 #ifdef __cplusplus
 } /* closing brace for extern "C" */
+#endif
 #endif

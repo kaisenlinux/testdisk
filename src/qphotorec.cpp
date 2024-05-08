@@ -88,7 +88,7 @@
 #include "qphotorec.h"
 
 extern const arch_fnct_t arch_none;
-extern file_enable_t list_file_enable[];
+extern file_enable_t array_file_enable[];
 
 QPhotorec::QPhotorec(QWidget *my_parent) : QWidget(my_parent)
 {
@@ -116,8 +116,8 @@ QPhotorec::QPhotorec(QWidget *my_parent) : QWidget(my_parent)
   options->expert=0;
   options->lowmem=0;
   options->verbose=0;
-  options->list_file_format=list_file_enable;
-  reset_list_file_enable(options->list_file_format);
+  options->list_file_format=array_file_enable;
+  reset_array_file_enable(options->list_file_format);
 
   stop_the_recovery=false;
 
@@ -374,9 +374,9 @@ QWidget *QPhotorec::copyright(QWidget * qwparent)
 int QPhotorec::no_disk_warning()
 {
   QString msg;
-  msg=tr("No harddisk found");
+  msg=tr("No hard disk found");
 #if defined(__CYGWIN__) || defined(__MINGW32__)
-  msg=tr("No harddisk found\n"
+  msg=tr("No hard disk found\n"
     "You need to be administrator to use this program.\n"
     "Under Win9x, use the DOS version instead.\n"
     "Under Vista or later, select this program, right-click and choose \"Run as administrator\".");
@@ -385,7 +385,7 @@ int QPhotorec::no_disk_warning()
 #ifdef HAVE_GETEUID
   if(geteuid()!=0)
   {
-    msg=tr("No harddisk found\n"
+    msg=tr("No hard disk found\n"
       "You need to be root to use PhotoRec.");
   }
 #endif
@@ -924,7 +924,7 @@ void QPhotorec::qphotorec_about()
 {
   QPixmap pixmap_img = QPixmap(":res/photorec_64x64.png");
   QMessageBox msg;
-  msg.setText(tr("QPhotoRec is is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 2 of the License, or (at your option) any later version.\n\nQPhotoRec is is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more details.\n\nYou should have received a copy of the GNU General Public License along with QPhotoRec.  If not, see <http://www.gnu.org/licenses/>."));
+  msg.setText(tr("QPhotoRec is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 2 of the License, or (at your option) any later version.\n\nQPhotoRec is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more details.\n\nYou should have received a copy of the GNU General Public License along with QPhotoRec.  If not, see <http://www.gnu.org/licenses/>."));
   msg.setWindowTitle(tr("QPhotoRec: About"));
   msg.addButton(QMessageBox::Close);
   msg.setIconPixmap(pixmap_img);
@@ -936,7 +936,7 @@ void QPhotorec::qphotorec_formats()
   file_enable_t *file_enable;
   QStringList list;
   formats=new QListWidget();
-  for(file_enable=list_file_enable;
+  for(file_enable=array_file_enable;
       file_enable->file_hint!=NULL;
       file_enable++)
   {
@@ -972,7 +972,7 @@ void QPhotorec::qphotorec_formats()
   connect(bt_restore, SIGNAL(clicked()), this, SLOT(formats_restore()));
   fenetre3.exec();
   int i;
-  for (i = 0, file_enable=list_file_enable;
+  for (i = 0, file_enable=array_file_enable;
       i < formats->count() && file_enable->file_hint!=NULL;
       i++, file_enable++)
   {
@@ -993,7 +993,7 @@ void QPhotorec::formats_restore()
 {
   file_enable_t *file_enable;
   int i;
-  for (i = 0, file_enable=list_file_enable;
+  for (i = 0, file_enable=array_file_enable;
       i < formats->count() && file_enable->file_hint!=NULL;
       i++, file_enable++)
   {

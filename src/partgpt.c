@@ -20,9 +20,15 @@
 
  */
 
-
+#if !defined(SINGLE_PARTITION_TYPE) || defined(SINGLE_PARTITION_GPT)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
+#endif
+
+#if defined(DISABLED_FOR_FRAMAC)
+#undef HAVE_SYS_UUID_H
+#undef HAVE_UUID_H
+#undef HAVE_UUID_UUID_H
 #endif
 
 #include <stdio.h>
@@ -38,8 +44,7 @@
 #include <uuid.h>
 #elif defined(HAVE_UUID_UUID_H)
 #include <uuid/uuid.h>
-#endif
-#if defined(HAVE_SYS_UUID_H)
+#elif defined(HAVE_SYS_UUID_H)
 #include <sys/uuid.h>
 #endif
 #include <assert.h>
@@ -47,33 +52,84 @@
 #include "fnctdsk.h"
 #include "lang.h"
 #include "intrf.h"
+#ifndef DISABLED_FOR_FRAMAC
 #include "analyse.h"
+#endif
 #include "chgtype.h"
 #include "partgpt.h"
 #include "savehdr.h"
+#ifndef DISABLED_FOR_FRAMAC
+#include "apfs.h"
+#include "bfs.h"
 #include "exfat.h"
 #include "fat.h"
 #include "hfs.h"
 #include "hfsp.h"
 #include "lvm.h"
+#include "md.h"
 #include "ntfs.h"
 #include "refs.h"
+#endif
 #include "log.h"
 #include "log_part.h"
-#include "md.h"
 #include "guid_cmp.h"
 #include "guid_cpy.h"
 #include "unicode.h"
 #include "crc.h"
 
+/*@
+  @ requires \valid(disk);
+  @ requires \valid(partition);
+  @*/
 static int check_part_gpt(disk_t *disk, const int verbose, partition_t *partition, const int saveheader);
+
+/*@
+  @ requires \valid(disk_car);
+  @ ensures  valid_list_part(\result);
+  @*/
 static list_part_t *read_part_gpt(disk_t *disk_car, const int verbose, const int saveheader);
+
+/*@
+  @ requires \valid(disk_car);
+  @ requires list_part == \null || \valid(list_part);
+  @ requires separation: \separated(disk_car, list_part);
+  @*/
 static list_part_t *init_part_order_gpt(const disk_t *disk_car, list_part_t *list_part);
+
+/*@
+  @ requires \valid_read(disk_car);
+  @ requires \valid(partition);
+  @ requires separation: \separated(disk_car, partition);
+  @ assigns partition->status;
+  @*/
 static void set_next_status_gpt(const disk_t *disk_car, partition_t *partition);
-static int test_structure_gpt(list_part_t *list_part);
+
+/*@
+  @ requires list_part == \null || \valid_read(list_part);
+  @*/
+static int test_structure_gpt(const list_part_t *list_part);
+
+/*@
+  @ requires \valid(partition);
+  @ assigns \nothing;
+  @*/
 static int is_part_known_gpt(const partition_t *partition);
+
+/*@
+  @ requires \valid_read(disk_car);
+  @ requires list_part == \null || \valid(list_part);
+  @*/
 static void init_structure_gpt(const disk_t *disk_car,list_part_t *list_part, const int verbose);
+
+/*@
+  @ requires \valid_read(partition);
+  @ assigns \nothing;
+  @*/
 static const char *get_partition_typename_gpt(const partition_t *partition);
+
+/*@
+  @ assigns \nothing;
+  @*/
 static const char *get_gpt_typename(const efi_guid_t part_type_gpt);
 
 const struct systypes_gtp gpt_sys_types[] = {
@@ -91,6 +147,7 @@ const struct systypes_gtp gpt_sys_types[] = {
   { GPT_ENT_TYPE_MS_LDM_METADATA,	"MS LDM MetaData"	},
   { GPT_ENT_TYPE_MS_LDM_DATA,		"MS LDM Data"		},
   { GPT_ENT_TYPE_MS_RECOVERY,		"Windows Recovery Env"  },
+  { GPT_ENT_TYPE_MS_SPACES,		"MS Storage Spaces"	},
 //  { GPT_ENT_TYPE_LINUX_DATA
   { GPT_ENT_TYPE_LINUX_RAID,		"Linux Raid"		},
   { GPT_ENT_TYPE_LINUX_SWAP,		"Linux Swap"		},
@@ -101,7 +158,7 @@ const struct systypes_gtp gpt_sys_types[] = {
   { GPT_ENT_TYPE_LINUX_DATA,		"Linux filesys. data"	},
   { GPT_ENT_TYPE_HPUX_DATA,		"HPUX Data"		},
   { GPT_ENT_TYPE_HPUX_SERVICE,		"HPUX Service"		},
-  { GPT_ENT_TYPE_MAC_AFS,		"Apple APFS"		},
+  { GPT_ENT_TYPE_MAC_APFS,		"Apple APFS"		},
   { GPT_ENT_TYPE_MAC_HFS,		"Mac HFS"		},
   { GPT_ENT_TYPE_MAC_UFS,		"Mac UFS"		},
   { GPT_ENT_TYPE_MAC_RAID,		"Mac Raid"		},
@@ -109,6 +166,7 @@ const struct systypes_gtp gpt_sys_types[] = {
   { GPT_ENT_TYPE_MAC_BOOT,		"Mac Boot"		},
   { GPT_ENT_TYPE_MAC_LABEL,		"Mac Label"		},
   { GPT_ENT_TYPE_MAC_TV_RECOVERY,	"Mac TV Recovery"	},
+  { GPT_ENT_TYPE_APPLE_CORE_STORAGE,	"Apple Core Storage"	},
   { GPT_ENT_TYPE_SOLARIS_BOOT,		"Solaris /boot"		},
   { GPT_ENT_TYPE_SOLARIS_ROOT,		"Solaris /"		},
   { GPT_ENT_TYPE_SOLARIS_SWAP,		"Solaris Swap"		},
@@ -122,6 +180,7 @@ const struct systypes_gtp gpt_sys_types[] = {
   { GPT_ENT_TYPE_SOLARIS_RESERVED3,	"Solaris Reserved3"	},
   { GPT_ENT_TYPE_SOLARIS_RESERVED4,	"Solaris Reserved4"	},
   { GPT_ENT_TYPE_SOLARIS_RESERVED5,	"Solaris Reserved5"	},
+  { GPT_ENT_TYPE_BEOS_BFS,		"BeFS"},
   { GPT_ENT_TYPE_UNUSED,  NULL }
  };
 
@@ -147,6 +206,11 @@ arch_fnct_t arch_gpt=
   .is_part_known=&is_part_known_gpt
 };
 
+/*@
+  @ requires \valid(disk_car);
+  @ requires valid_disk(disk_car);
+  @*/
+// ensures  valid_list_part(\result);
 static list_part_t *read_part_gpt_aux(disk_t *disk_car, const int verbose, const int saveheader, const uint64_t hdr_lba)
 {
   struct gpt_hdr *gpt;
@@ -295,7 +359,7 @@ static list_part_t *read_part_gpt_aux(disk_t *disk_car, const int verbose, const
           le64(gpt_entry->ent_lba_start)+1) * disk_car->sector_size;
       new_partition->status=STATUS_PRIM;
       UCSle2str(new_partition->partname, (const uint16_t *)&gpt_entry->ent_name, sizeof(gpt_entry->ent_name)/2);
-      new_partition->arch->check_part(disk_car,verbose,new_partition,saveheader);
+      check_part_gpt(disk_car,verbose,new_partition,saveheader);
       /* log_debug("%u ent_attr %08llx\n", new_partition->order, (long long unsigned)le64(gpt_entry->ent_attr)); */
       aff_part_buffer(AFF_PART_ORDER|AFF_PART_STATUS,disk_car,new_partition);
       new_list_part=insert_new_partition(new_list_part, new_partition, 0, &insert_error);
@@ -337,13 +401,17 @@ static list_part_t *init_part_order_gpt(const disk_t *disk_car, list_part_t *lis
   return list_part;
 }
 
-list_part_t *add_partition_gpt_cli(disk_t *disk_car,list_part_t *list_part, char **current_cmd)
+list_part_t *add_partition_gpt_cli(const disk_t *disk_car, list_part_t *list_part, char **current_cmd)
 {
   partition_t *new_partition;
   assert(current_cmd!=NULL);
   new_partition=partition_new(&arch_gpt);
   new_partition->part_offset=disk_car->sector_size;
   new_partition->part_size=disk_car->disk_size-new_partition->part_offset;
+  /*@
+    @ loop invariant valid_list_part(list_part);
+    @ loop invariant valid_read_string(*current_cmd);
+    @ */
   while(1)
   {
     skip_comma_in_command(current_cmd);
@@ -379,19 +447,23 @@ list_part_t *add_partition_gpt_cli(disk_t *disk_car,list_part_t *list_part, char
     {
       int insert_error=0;
       list_part_t *new_list_part=insert_new_partition(list_part, new_partition, 0, &insert_error);
+      /*@ assert valid_list_part(new_list_part); */
       if(insert_error>0)
       {
         free(new_partition);
+	/*@ assert valid_list_part(new_list_part); */
         return new_list_part;
       }
       new_partition->status=STATUS_PRIM;
       if(test_structure_gpt(list_part)!=0)
         new_partition->status=STATUS_DELETED;
+      /*@ assert valid_list_part(new_list_part); */
       return new_list_part;
     }
     else
     {
       free(new_partition);
+      /*@ assert valid_list_part(list_part); */
       return list_part;
     }
   }
@@ -405,7 +477,7 @@ static void set_next_status_gpt(const disk_t *disk_car, partition_t *partition)
     partition->status=STATUS_DELETED;
 }
 
-static int test_structure_gpt(list_part_t *list_part)
+static int test_structure_gpt(const list_part_t *list_part)
 { /* Return 1 if bad*/
   int res;
   list_part_t *new_list_part;
@@ -444,7 +516,7 @@ static void init_structure_gpt(const disk_t *disk_car,list_part_t *list_part, co
   }
     for(element=new_list_part;element!=NULL;element=element->next)
       element->part->status=STATUS_PRIM;
-  if(disk_car->arch->test_structure(new_list_part))
+  if(test_structure_gpt(new_list_part))
   {
     for(element=new_list_part;element!=NULL;element=element->next)
       element->part->status=STATUS_DELETED;
@@ -494,6 +566,18 @@ static int check_part_gpt(disk_t *disk, const int verbose,partition_t *partition
     if(ret!=0)
       screen_buffer_add("No HFS or HFS+ structure\n");
   }
+  else if(guid_cmp(partition->part_type_gpt, GPT_ENT_TYPE_MAC_APFS)==0)
+  {
+    ret=check_APFS(disk, partition);
+    if(ret!=0)
+      screen_buffer_add("No valid APFS structure\n");
+  }
+  else if(guid_cmp(partition->part_type_gpt, GPT_ENT_TYPE_BEOS_BFS)==0)
+  {
+    ret=check_BeFS(disk, partition);
+    if(ret!=0)
+      screen_buffer_add("No BFS structure\n");
+  }
   log_set_levels(old_levels);
   if(ret!=0)
   {
@@ -511,9 +595,11 @@ static int check_part_gpt(disk_t *disk, const int verbose,partition_t *partition
 static const char *get_gpt_typename(const efi_guid_t part_type_gpt)
 {
   int i;
+  /*@ loop assigns i; */
   for(i=0; gpt_sys_types[i].name!=NULL; i++)
     if(guid_cmp(gpt_sys_types[i].part_type, part_type_gpt)==0)
       return gpt_sys_types[i].name;
+#ifndef DISABLED_FOR_FRAMAC
   log_info("%8x %04x %04x %02x %02x %02x %02x %02x %02x %02x %02x\n",
       part_type_gpt.time_low,
       part_type_gpt.time_mid,
@@ -526,6 +612,7 @@ static const char *get_gpt_typename(const efi_guid_t part_type_gpt)
       part_type_gpt.node[3],
       part_type_gpt.node[4],
       part_type_gpt.node[5]);
+#endif
   return NULL;
 }
 
@@ -533,3 +620,4 @@ static const char *get_partition_typename_gpt(const partition_t *partition)
 {
   return get_gpt_typename(partition->part_type_gpt);
 }
+#endif

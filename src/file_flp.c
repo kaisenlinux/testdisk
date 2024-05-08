@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_flp)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,8 +32,8 @@
 #include "filegen.h"
 #include "common.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_flp(file_stat_t *file_stat);
-static int header_check_flp(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
 
 const file_hint_t file_hint_flp= {
   .extension="flp",
@@ -54,16 +55,24 @@ struct flp_header
   uint32_t len2;
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires buffer_size >=sizeof(struct flp_header);
+  @ requires separation: \separated(&file_hint_flp, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_flp(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct flp_header *hdr=(const struct flp_header *)buffer;
+  const unsigned int len2=le32(hdr->len2);
   if(strncmp(hdr->magic2, "FLdt", 4)!=0)
     return 0;
-  if(le32(hdr->len2)==0)
+  if(len2==0)
     return 0;
   reset_file_recovery(file_recovery_new);
   file_recovery_new->extension=file_hint_flp.extension;
-  file_recovery_new->calculated_file_size=(uint64_t)le32(hdr->len2) + 0x16;
+  file_recovery_new->calculated_file_size=(uint64_t)len2 + 0x16;
   file_recovery_new->data_check=&data_check_size;
   file_recovery_new->file_check=&file_check_size;
   return 1;
@@ -76,3 +85,4 @@ static void register_header_check_flp(file_stat_t *file_stat)
   static const unsigned char flp_header[8]= {'F', 'L', 'h', 'd', 0x06, 0x00, 0x00, 0x00};
   register_header_check(0, flp_header,sizeof(flp_header), &header_check_flp, file_stat);
 }
+#endif

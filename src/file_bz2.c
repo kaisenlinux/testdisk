@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_bz2)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -30,8 +31,8 @@
 #include "types.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_bz2(file_stat_t *file_stat);
-static int header_check_bz2(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
 
 const file_hint_t file_hint_bz2= {
   .extension="bz2",
@@ -42,16 +43,16 @@ const file_hint_t file_hint_bz2= {
   .register_header_check=&register_header_check_bz2
 };
 
-static const unsigned char bz2_header[3]= {'B','Z','h'};
-
-static void register_header_check_bz2(file_stat_t *file_stat)
-{
-  register_header_check(0, bz2_header,sizeof(bz2_header), &header_check_bz2, file_stat);
-}
-
+/*@
+  @ requires buffer_size >= 10;
+  @ requires separation: \separated(&file_hint_bz2, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_bz2(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
-  if(buffer[0]=='B' && buffer[1]=='Z' && buffer[2]=='h' && buffer[3]>='0' && buffer[4]=='1' && buffer[5]=='A' && buffer[6]=='Y' && buffer[7]=='&' && buffer[8]=='S' && buffer[9]=='Y')
+  if(buffer[0]=='B' && buffer[1]=='Z' && buffer[2]=='h' && buffer[3]>='0' && buffer[3]<='9' && buffer[4]=='1' && buffer[5]=='A' && buffer[6]=='Y' && buffer[7]=='&' && buffer[8]=='S' && buffer[9]=='Y')
   {
     reset_file_recovery(file_recovery_new);
     file_recovery_new->extension=file_hint_bz2.extension;
@@ -59,3 +60,10 @@ static int header_check_bz2(const unsigned char *buffer, const unsigned int buff
   }
   return 0;
 }
+
+static void register_header_check_bz2(file_stat_t *file_stat)
+{
+  static const unsigned char bz2_header[3]= {'B','Z','h'};
+  register_header_check(0, bz2_header,sizeof(bz2_header), &header_check_bz2, file_stat);
+}
+#endif

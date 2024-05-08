@@ -19,12 +19,20 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 */
+#ifndef _FILE_DOC_H
+#define _FILE_DOC_H
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/*@
+  @ requires offset <= 4006;
+  @ requires valid_file_check_param(file_recovery);
+  @ ensures  valid_file_check_result(file_recovery);
+  @*/
 void file_check_doc_aux(file_recovery_t *file_recovery, const uint64_t offset);
 
 #ifdef __cplusplus
 } /* closing brace for extern "C" */
+#endif
 #endif

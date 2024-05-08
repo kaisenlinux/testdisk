@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_djv)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,6 +32,7 @@
 #include "filegen.h"
 #include "common.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_djv(file_stat_t *file_stat);
 
 const file_hint_t file_hint_djv= {
@@ -49,6 +51,13 @@ struct djv_header
   uint32_t size;
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires buffer_size >= sizeof(struct djv_header);
+  @ requires separation: \separated(&file_hint_djv, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_djv(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct djv_header *hdr=(const struct djv_header *)buffer;
@@ -68,3 +77,4 @@ static void register_header_check_djv(file_stat_t *file_stat)
   static const unsigned char djv_header[8]= { 'A','T','&','T','F','O','R','M'};
   register_header_check(0, djv_header,sizeof(djv_header), &header_check_djv, file_stat);
 }
+#endif

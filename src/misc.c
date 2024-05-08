@@ -24,6 +24,12 @@
 #include <config.h>
 #endif
 
+#if defined(DISABLED_FOR_FRAMAC)
+#undef HAVE_STRPTIME
+#undef HAVE_SYS_UTSNAME_H
+#undef HAVE_UNAME
+#endif
+
 #include <string.h>
 #include <ctype.h>
 #include <stdarg.h>
@@ -158,6 +164,13 @@ https://msdn.microsoft.com/en-us/library/windows/desktop/ms724834%28v=vs.85%29.a
       else
 	snprintf(buffer, sizeof(buffer) - 1, "Windows Server 2012 R2 (%lu)", Ver.dwBuildNumber);
     }
+    else if (Ver.dwMajorVersion == 10 && Ver.dwMinorVersion == 0)
+    {
+      if( Ver.wProductType == VER_NT_WORKSTATION )
+	snprintf(buffer, sizeof(buffer) - 1, "Windows 10 (%lu)", Ver.dwBuildNumber);
+      else
+	snprintf(buffer, sizeof(buffer) - 1, "Windows Server 2016 (%lu)", Ver.dwBuildNumber);
+    }
     else
     {
       snprintf(buffer, sizeof(buffer) - 1, "Windows %s %i.%i.%i",
@@ -220,6 +233,10 @@ https://msdn.microsoft.com/en-us/library/windows/desktop/ms724834%28v=vs.85%29.a
   return "Apple";
 #elif defined(__OS2__)
   return "OS2";
+#elif defined(DISABLED_FOR_FRAMAC)
+  const char *res="Frama-C";
+  /*@ assert valid_read_string(res); */
+  return res;
 #else
   return "unknown";
 #endif
@@ -273,6 +290,8 @@ const char *get_compiler(void)
 #else
   return "unknown compiler";
 #endif
+  buffer[99]='\0';
+  /*@ assert valid_read_string(&buffer[0]); */
   return buffer;
 }
 
@@ -281,7 +300,7 @@ const char *get_compilation_date(void)
 {
   static char buffer[100] = {0x00};
 #ifdef __DATE__ 
-#ifdef HAVE_STRPTIME
+#if defined(HAVE_STRPTIME)
   struct tm tm;
   memset(&tm,0,sizeof(tm));
   if(strptime(__DATE__, "%b %d %Y", &tm)!=NULL)
@@ -299,6 +318,7 @@ const char *get_compilation_date(void)
 #endif
 #endif
 #endif
+  /*@ assert valid_read_string(&buffer[0]); */
   return buffer;
 }
 #endif

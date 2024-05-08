@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_key)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -30,6 +31,7 @@
 #include "types.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_key(file_stat_t *file_stat);
 
 const file_hint_t file_hint_key= {
@@ -41,6 +43,12 @@ const file_hint_t file_hint_key= {
   .register_header_check=&register_header_check_key
 };
 
+/*@
+  @ requires separation: \separated(&file_hint_key, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_key(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   reset_file_recovery(file_recovery_new);
@@ -55,3 +63,4 @@ static void register_header_check_key(file_stat_t *file_stat)
 {
   register_header_check(0, "323382b3c4f1c6d2", 16, &header_check_key, file_stat);
 }
+#endif

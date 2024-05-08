@@ -22,6 +22,14 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
+
+#if defined(DISABLED_FOR_FRAMAC)
+#undef HAVE_NCURSES
+#endif
+
+#if defined(__CYGWIN__) || defined(__MINGW32__) || defined(DJGPP) || !defined(HAVE_GETEUID)
+#undef SUDO_BIN
+#endif
  
 #ifdef HAVE_NCURSES
 #include <stdio.h>
@@ -42,7 +50,7 @@ int intrf_no_disk_ncurses(const char *prog_name)
   wmove(stdscr,5,0);
   wprintw(stdscr,"comes with ABSOLUTELY NO WARRANTY.");
   wmove(stdscr,7,0);
-  wprintw(stdscr,"No harddisk found\n");
+  wprintw(stdscr,"No hard disk found\n");
 #if defined(__CYGWIN__) || defined(__MINGW32__)
   wmove(stdscr,8,0);
   wprintw(stdscr,"You need to be administrator to use %s.\n", prog_name);
@@ -53,8 +61,7 @@ int intrf_no_disk_ncurses(const char *prog_name)
   wmove(stdscr,11,0);
   wprintw(stdscr,"choose \"Run as administrator\".\n");
 #elif defined(DJGPP)
-#else
-#ifdef HAVE_GETEUID
+#elif defined(HAVE_GETEUID)
   if(geteuid()!=0)
   {
     wmove(stdscr,8,0);
@@ -77,7 +84,6 @@ int intrf_no_disk_ncurses(const char *prog_name)
     }
 #endif
   }
-#endif
 #endif
   wmove(stdscr,22,0);
   wattrset(stdscr, A_REVERSE);

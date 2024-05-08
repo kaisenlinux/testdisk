@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_skp)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -30,17 +31,24 @@
 #include "types.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_skp(file_stat_t *file_stat);
 
 const file_hint_t file_hint_skp= {
   .extension="skp",
   .description="SketchUp",
-  .max_filesize=10*1024*1024,
+  .max_filesize=PHOTOREC_MAX_FILE_SIZE,
   .recover=1,
   .enable_by_default=1,
   .register_header_check=&register_header_check_skp
 };
 
+/*@
+  @ requires separation: \separated(&file_hint_skp, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_skp(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   reset_file_recovery(file_recovery_new);
@@ -55,3 +63,4 @@ static void register_header_check_skp(file_stat_t *file_stat)
     'U',  0x00,  'p', 0x00, ' ', 0x00, 'M', 0x00, 'o', 0x00, 'd', 0x00, 'e', 0x00, 'l', 0x00 };
   register_header_check(0, skp_header,sizeof(skp_header), &header_check_skp, file_stat);
 }
+#endif

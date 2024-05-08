@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_tax)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,6 +32,7 @@
 #include "filegen.h"
 
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_tax(file_stat_t *file_stat);
 
 const file_hint_t file_hint_tax= {
@@ -42,6 +44,12 @@ const file_hint_t file_hint_tax= {
   .register_header_check=&register_header_check_tax
 };
 
+/*@
+  @ requires separation: \separated(&file_hint_tax, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_tax(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   reset_file_recovery(file_recovery_new);
@@ -54,3 +62,4 @@ static void register_header_check_tax(file_stat_t *file_stat)
   static const unsigned char tax_header[6]=  { 'T', 'T', 'F', 'N', 0x01, 0x01};
   register_header_check(0, tax_header,  sizeof(tax_header),  &header_check_tax, file_stat);
 }
+#endif

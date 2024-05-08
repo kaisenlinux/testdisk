@@ -44,7 +44,7 @@
 #include "log.h"
 #define BACKUP_MAXSIZE 5120
 
-int save_header(disk_t *disk_car,partition_t *partition, const int verbose)
+int save_header(disk_t *disk_car, const partition_t *partition, const int verbose)
 {
   unsigned char *buffer;
   FILE *f_backup;
@@ -202,9 +202,9 @@ backup_disk_t *partition_load(const disk_t *disk_car, const int verbose)
   return list_backup;
 }
 
-int partition_save(disk_t *disk_car, list_part_t *list_part, const int verbose)
+int partition_save(disk_t *disk_car, const list_part_t *list_part, const int verbose)
 {
-  list_part_t *parts;
+  const list_part_t *parts;
   FILE *f_backup;
   if(verbose>0)
   {
@@ -216,7 +216,7 @@ int partition_save(disk_t *disk_car, list_part_t *list_part, const int verbose)
     log_critical("Can't create backup.log file: %s\n",strerror(errno));
     return -1;
   }
-  fprintf(f_backup,"#%u %s\n",(unsigned int)time(NULL), disk_car->description(disk_car));
+  fprintf(f_backup,"#%lu %s\n",(unsigned long int)time(NULL), disk_car->description(disk_car));
   for(parts=list_part;parts!=NULL;parts=parts->next)
   {
     char status='D';

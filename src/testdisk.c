@@ -23,6 +23,13 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
+#if defined(__CYGWIN__) || defined(__MINGW32__) || defined(DJGPP) || !defined(HAVE_GETEUID)
+#undef SUDO_BIN
+#endif
+
+#if defined(DISABLED_FOR_FRAMAC)
+#undef HAVE_LIBEWF
+#endif
 
 #include <stdio.h>
 #ifdef HAVE_STDLIB_H
@@ -67,19 +74,26 @@
 #include "hidden.h"
 
 #ifdef HAVE_SIGACTION
+int need_to_stop=0;
 static struct sigaction action;
-static void sighup_hdlr(int sig);
 
 static void sighup_hdlr(int sig)
 {
   if(sig == SIGINT)
-    log_critical("SIGINT detected! TestDisk has been killed.\n");
+    log_critical("SIGINT detected! PhotoRec has been killed.\n");
+  else if(sig == SIGHUP)
+    log_critical("SIGHUP detected! PhotoRec has been killed.\n");
   else
-    log_critical("SIGHUP detected! TestDisk has been killed.\n");
+    log_critical("SIGTERM detected! PhotoRec has been killed.\n");
   log_flush();
-  action.sa_handler=SIG_DFL;
-  sigaction(sig,&action,NULL);
-  kill(0, sig);
+  if(need_to_stop==1)
+  {
+    action.sa_handler=SIG_DFL;
+    sigaction(sig,&action,NULL);
+    kill(0, sig);
+    return ;
+  }
+  need_to_stop=1;
 }
 #endif
 
@@ -120,6 +134,11 @@ static void display_version(void)
 #endif
   printf("ext2fs lib: %s, ntfs lib: %s, reiserfs lib: %s, ewf lib: %s, curses lib: %s\n",
       td_ext2fs_version(), td_ntfs_version(), td_reiserfs_version(), td_ewf_version(), td_curses_version());
+#ifdef HAVE_ICONV
+  printf("iconv support: yes\n");
+#else
+  printf("iconv support: no\n");
+#endif
   printf("OS: %s\n" , get_os());
 }
 
@@ -134,14 +153,11 @@ static int display_disk_list(list_disk_t *list_disk, const int testdisk_mode,
   if(list_disk==NULL)
   {
     printf("No disk detected.\n");
-#if defined(__CYGWIN__) || defined(__MINGW32__) || defined(DJGPP)
-#else
-#ifdef HAVE_GETEUID
+#if defined(HAVE_GETEUID) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(DJGPP)
     if(geteuid()!=0)
     {
       printf("You need to be root to use TestDisk.\n");
     }
-#endif
 #endif
     return 1;
   }
@@ -220,8 +236,10 @@ int main( int argc, char **argv )
   const char *cmd_device=NULL;
   char *cmd_run=NULL;
   const char *logfile="testdisk.log";
-  FILE *log_handle=NULL;
+  int log_opened=0;
   int log_errno=0;
+  if(argc <= 0)
+    return 1;
   /* srand needed for GPT creation (weak is ok) */
   srand(time(NULL));
 #ifdef HAVE_SIGACTION
@@ -229,14 +247,12 @@ int main( int argc, char **argv )
   sigemptyset(&action.sa_mask);
   sigaddset(&action.sa_mask, SIGINT);
   sigaddset(&action.sa_mask, SIGHUP);
+  sigaddset(&action.sa_mask, SIGTERM);
   action.sa_handler  = &sighup_hdlr;
   action.sa_flags = 0;
-  if(sigaction(SIGINT, &action, NULL)==-1)
-  {
-    printf("Error on SIGACTION call\n");
-    return -1;
-  }
-  if(sigaction(SIGHUP, &action, NULL)==-1)
+  if( sigaction(SIGINT,  &action, NULL)==-1 ||
+      sigaction(SIGHUP,  &action, NULL)==-1 ||
+      sigaction(SIGTERM, &action, NULL)==-1 )
   {
     printf("Error on SIGACTION call\n");
     return -1;
@@ -265,16 +281,16 @@ int main( int argc, char **argv )
     {
       if(create_log==TD_LOG_NONE)
         create_log=TD_LOG_APPEND;
-      if(log_handle==NULL)
-	log_handle=log_open(logfile, create_log, &log_errno);
+      if(log_opened==0)
+	log_opened=log_open(logfile, create_log, &log_errno);
     }
     else if((strcmp(argv[i],"/debug")==0) || (strcmp(argv[i],"-debug")==0))
     {
       verbose++;
       if(create_log==TD_LOG_NONE)
         create_log=TD_LOG_APPEND;
-      if(log_handle==NULL)
-	log_handle=log_open(logfile, create_log, &log_errno);
+      if(log_opened==0)
+	log_opened=log_open(logfile, create_log, &log_errno);
     }
     else if((strcmp(argv[i],"/all")==0) || (strcmp(argv[i],"-all")==0))
       testdisk_mode|=TESTDISK_O_ALL;
@@ -366,8 +382,8 @@ int main( int argc, char **argv )
     }
   }
 #endif
-  if(create_log!=TD_LOG_NONE && log_handle==NULL)
-    log_handle=log_open_default(logfile, create_log, &log_errno);
+  if(create_log!=TD_LOG_NONE && log_opened==0)
+    log_opened=log_open_default(logfile, create_log, &log_errno);
 #ifdef HAVE_NCURSES
   /* ncurses need locale for correct unicode support */
   if(start_ncurses("TestDisk",argv[0]))
@@ -380,33 +396,29 @@ int main( int argc, char **argv )
     verbose=1;
     create_log=ask_testdisk_log_creation();
     if(create_log==TD_LOG_CREATE || create_log==TD_LOG_APPEND)
-      log_handle=log_open(logfile, create_log, &log_errno);
+      log_opened=log_open(logfile, create_log, &log_errno);
   }
   {
     const char*filename=logfile;
-    while(create_log!=TD_LOG_NONE && log_handle==NULL)
+    while(create_log!=TD_LOG_NONE && log_opened==0)
     {
       filename=ask_log_location(filename, log_errno);
       if(filename!=NULL)
-	log_handle=log_open(filename, create_log, &log_errno);
+	log_opened=log_open(filename, create_log, &log_errno);
       else
 	create_log=TD_LOG_NONE;
     }
   }
 #endif
-  if(log_handle!=NULL)
   {
     time_t my_time;
-#ifdef HAVE_DUP2
-    dup2(fileno(log_handle),2);
-#endif
     my_time=time(NULL);
     log_info("\n\n%s",ctime(&my_time));
-    log_info("Command line: TestDisk");
-    for(i=1;i<argc;i++)
-      log_info(" %s", argv[i]);
-    log_info("\n\n");
   }
+  log_info("Command line: TestDisk");
+  for(i=1;i<argc;i++)
+    log_info(" %s", argv[i]);
+  log_info("\n\n");
   log_info("TestDisk %s, Data Recovery Utility, %s\nChristophe GRENIER <grenier@cgsecurity.org>\nhttps://www.cgsecurity.org\n", VERSION, TESTDISKDATE);
   log_info("OS: %s\n" , get_os());
   log_info("Compiler: %s\n", get_compiler());
@@ -415,14 +427,11 @@ int main( int argc, char **argv )
 #endif
   log_info("ext2fs lib: %s, ntfs lib: %s, reiserfs lib: %s, ewf lib: %s, curses lib: %s\n",
       td_ext2fs_version(), td_ntfs_version(), td_reiserfs_version(), td_ewf_version(), td_curses_version());
-#if defined(__CYGWIN__) || defined(__MINGW32__) || defined(DJGPP)
-#else
-#ifdef HAVE_GETEUID
+#if defined(HAVE_GETEUID) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(DJGPP)
   if(geteuid()!=0)
   {
     log_warning("User is not root!\n");
   }
-#endif
 #endif
   log_flush();
 #ifdef HAVE_NCURSES
@@ -449,15 +458,9 @@ int main( int argc, char **argv )
     hd_update_all_geometry(list_disk, verbose);
   log_disk_list(list_disk);
 #ifdef SUDO_BIN
-  if(list_disk==NULL)
+  if(list_disk==NULL && geteuid()!=0)
   {
-#if defined(__CYGWIN__) || defined(__MINGW32__) || defined(DJGPP)
-#else
-#ifdef HAVE_GETEUID
-    if(geteuid()!=0)
-      use_sudo=2;
-#endif
-#endif
+    use_sudo=2;
   }
   if(use_sudo==0)
     use_sudo=do_curses_testdisk(verbose,dump_ind,list_disk,saveheader,cmd_device,&cmd_run);

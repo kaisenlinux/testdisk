@@ -24,6 +24,12 @@
 #include <config.h>
 #endif
 
+#if defined(DISABLED_FOR_FRAMAC)
+#undef HAVE_NCURSES
+#endif
+
+extern int need_to_stop;
+
 #include <stdio.h>
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
@@ -86,35 +92,41 @@ void menu_photorec(struct ph_param *params, struct ph_options *options, alloc_da
   list_part=init_list_part(params->disk, options);
   if(list_part==NULL)
     return;
+  /*@ assert valid_list_part(list_part); */
   log_all_partitions(params->disk, list_part);
   if(params->cmd_run!=NULL)
   {
+    /*@ assert valid_read_string(params->cmd_run); */
     if(menu_photorec_cli(list_part, params, options, list_search_space) > 0)
     {
       if(params->recup_dir==NULL)
       {
-	char *res;
+	char dst_path[4096];
+	dst_path[0]='\0';
 #ifdef HAVE_NCURSES
-	res=ask_location("Please select a destination to save the recovered files to.\nDo not choose to write the files to the same partition they were stored on.", "", NULL);
+	ask_location(dst_path, sizeof(dst_path), "Please select a destination to save the recovered files to.\nDo not choose to write the files to the same partition they were stored on.", "");
 #else
-	res=get_default_location();
+	td_getcwd(dst_path, sizeof(dst_path));
 #endif
-	if(res!=NULL)
+	if(dst_path[0]!='\0')
 	{
-	  params->recup_dir=(char *)MALLOC(strlen(res)+1+strlen(DEFAULT_RECUP_DIR)+1);
-	  strcpy(params->recup_dir,res);
+	  params->recup_dir=(char *)MALLOC(strlen(dst_path)+1+strlen(DEFAULT_RECUP_DIR)+1);
+	  strcpy(params->recup_dir, dst_path);
 	  if(strcmp(params->recup_dir,"/")!=0)
 	    strcat(params->recup_dir,"/");
 	  strcat(params->recup_dir,DEFAULT_RECUP_DIR);
-	  free(res);
 	}
       }
       if(params->recup_dir!=NULL)
+      {
+	/*@ assert valid_read_string(params->recup_dir); */
 	photorec(params, options, list_search_space);
+      }
     }
   }
   if(params->cmd_run!=NULL)
   {
+    /*@ assert valid_read_string(params->cmd_run); */
     skip_comma_in_command(&params->cmd_run);
     if(check_command(&params->cmd_run,"inter",5)==0)
     {   /* Start interactive mode */
@@ -124,8 +136,10 @@ void menu_photorec(struct ph_param *params, struct ph_options *options, alloc_da
   if(params->cmd_run!=NULL)
   {
     part_free_list(list_part);
+    /*@ assert valid_read_string(params->cmd_run); */
     return;
   }
+  /*@ assert params->cmd_run == \null; */
 #ifdef HAVE_NCURSES
   if(list_part->next!=NULL)
   {
@@ -137,7 +151,7 @@ void menu_photorec(struct ph_param *params, struct ph_options *options, alloc_da
     current_element_num=0;
     current_element=list_part;
   }
-  while(done==0)
+  while(done==0 && need_to_stop==0)
   { /* ncurses interface */
     list_part_t *element;
     unsigned int i;
@@ -146,9 +160,6 @@ void menu_photorec(struct ph_param *params, struct ph_options *options, alloc_da
     wmove(stdscr,4,0);
     wprintw(stdscr,"%s",params->disk->description_short(params->disk));
     mvwaddstr(stdscr,6,0,msg_PART_HEADER_LONG);
-#if defined(KEY_MOUSE) && defined(ENABLE_MOUSE)
-    mousemask(ALL_MOUSE_EVENTS, NULL);
-#endif
     for(i=0,element=list_part; element!=NULL && i<offset+INTER_SELECT;element=element->next,i++)
     {
       if(i<offset)
@@ -173,37 +184,6 @@ void menu_photorec(struct ph_param *params, struct ph_options *options, alloc_da
       wprintw(stdscr, "Next");
     command = wmenuSelect(stdscr, INTER_SELECT_Y+1, INTER_SELECT_Y, INTER_SELECT_X, menuMain, 8,
 	(options->expert==0?"SOFQ":"SOFGQ"), MENU_HORIZ | MENU_BUTTON | MENU_ACCEPT_OTHERS, menu);
-#if defined(KEY_MOUSE) && defined(ENABLE_MOUSE)
-    if(command == KEY_MOUSE)
-    {
-      MEVENT event;
-      if(getmouse(&event) == OK)
-      {	/* When the user clicks left mouse button */
-	if((event.bstate & BUTTON1_CLICKED) || (event.bstate & BUTTON1_DOUBLE_CLICKED))
-	{
-	  if(event.y >=7 && event.y<7+INTER_SELECT)
-	  {
-	    /* Disk selection */
-	    while(current_element_num > event.y-(7-offset) && current_element->prev!=NULL)
-	    {
-	      current_element=current_element->prev;
-	      current_element_num--;
-	    }
-	    while(current_element_num < event.y-(7-offset) && current_element->next!=NULL)
-	    {
-	      current_element=current_element->next;
-	      current_element_num++;
-	    }
-	    if(event.bstate & BUTTON1_DOUBLE_CLICKED)
-	      command='S';
-	  }
-	  else
-	    command = menu_to_command(INTER_SELECT_Y+1, INTER_SELECT_Y, INTER_SELECT_X, menuMain, 8,
-		(options->expert==0?"SOFQ":"SOFGQ"), MENU_HORIZ | MENU_BUTTON | MENU_ACCEPT_OTHERS, event.y, event.x);
-	}
-      }
-    }
-#endif
     switch(command)
     {
       case KEY_UP:
@@ -242,20 +222,22 @@ void menu_photorec(struct ph_param *params, struct ph_options *options, alloc_da
 	  menu=0;
 	  if(params->recup_dir==NULL)
 	  {
-	    char *res;
-	    res=ask_location("Please select a destination to save the recovered files to.\nDo not choose to write the files to the same partition they were stored on.", "", NULL);
-	    if(res!=NULL)
+	    char dst_path[4096];
+	    dst_path[0]='\0';
+	    ask_location(dst_path, sizeof(dst_path), "Please select a destination to save the recovered files to.\nDo not choose to write the files to the same partition they were stored on.", "");
+	    if(dst_path[0]!='\0')
 	    {
-	      params->recup_dir=(char *)MALLOC(strlen(res)+1+strlen(DEFAULT_RECUP_DIR)+1);
-	      strcpy(params->recup_dir,res);
+	      params->recup_dir=(char *)MALLOC(strlen(dst_path)+1+strlen(DEFAULT_RECUP_DIR)+1);
+	      strcpy(params->recup_dir, dst_path);
 	      if(strcmp(params->recup_dir,"/")!=0)
 		strcat(params->recup_dir,"/");
 	      strcat(params->recup_dir,DEFAULT_RECUP_DIR);
-	      free(res);
+	      /*@ assert valid_read_string(params->recup_dir); */
 	    }
 	  }
 	  if(params->recup_dir!=NULL)
 	  {
+	    /*@ assert valid_read_string(params->recup_dir); */
 	    if(td_list_empty(&list_search_space->list))
 	    {
 	      init_search_space(list_search_space, params->disk, params->partition);
@@ -319,4 +301,5 @@ void menu_photorec(struct ph_param *params, struct ph_options *options, alloc_da
 #endif
   log_info("\n");
   part_free_list(list_part);
+  /*@ assert params->cmd_run == \null; */
 }

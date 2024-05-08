@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_ahn)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -30,6 +31,7 @@
 #include "types.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_ahn(file_stat_t *file_stat);
 
 const file_hint_t file_hint_ahn= {
@@ -41,6 +43,13 @@ const file_hint_t file_hint_ahn= {
   .register_header_check=&register_header_check_ahn
 };
 
+/*@
+  @ requires buffer_size >= 4;
+  @ requires separation: \separated(&file_hint_ahn, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_ahn(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   static const unsigned char ahn_header[4]	= {'d','b','f',0x00};
@@ -56,3 +65,4 @@ static void register_header_check_ahn(file_stat_t *file_stat)
   static const unsigned char ahn_magic[10]	= {'A','H','N','E','N','B','L','A','T','T'};
   register_header_check(8, ahn_magic,      sizeof(ahn_magic), 	&header_check_ahn, file_stat);
 }
+#endif

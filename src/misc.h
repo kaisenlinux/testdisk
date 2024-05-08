@@ -19,16 +19,24 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#ifndef _MISC_H
+#define _MISC_H
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/*@ ensures valid_read_string(\result); */
 const char *get_os(void);
+
+/*@ ensures valid_read_string(\result); */
 const char *get_compiler(void);
+
 #ifdef RECORD_COMPILATION_DATE
+/*@ ensures valid_read_string(\result); */
 const char *get_compilation_date(void);
 #endif
 
 #ifdef __cplusplus
 } /* closing brace for extern "C" */
+#endif
 #endif

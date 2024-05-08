@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_axp)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -30,6 +31,7 @@
 #include "types.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_axp(file_stat_t *file_stat);
 
 const file_hint_t file_hint_axp= {
@@ -41,23 +43,48 @@ const file_hint_t file_hint_axp= {
   .register_header_check=&register_header_check_axp
 };
 
+const unsigned char axp_footer[34]= {
+  '<', 0, '/', 0, 'V', 0, 'F', 0,
+  'N', 0, 'G', 0, 'D', 0, 'o', 0,
+  'c', 0, 'u', 0, 'm', 0, 'e', 0,
+  'n', 0, 't', 0, '>', 0, 0x0d, 0,
+  0x0a, 0
+};
+
+/*@
+  @ requires valid_file_check_param(file_recovery);
+  @ ensures  valid_file_check_result(file_recovery);
+  @ assigns *file_recovery->handle, errno, file_recovery->file_size;
+  @ assigns Frama_C_entropy_source;
+  @*/
+static void file_check_axp(file_recovery_t *file_recovery)
+{
+  file_search_footer(file_recovery, axp_footer, sizeof(axp_footer), 1);
+}
+
+/*@
+  @ requires file_recovery->data_check==&data_check_axp;
+  @ requires buffer_size >= 2*sizeof(axp_footer);
+  @ requires valid_data_check_param(buffer, buffer_size, file_recovery);
+  @ ensures  valid_data_check_result(\result, file_recovery);
+  @ assigns file_recovery->calculated_file_size;
+  @*/
 static data_check_t data_check_axp(const unsigned char *buffer, const unsigned int buffer_size, file_recovery_t *file_recovery)
 {
-  const unsigned char axp_footer[34]= {
-    '<', 0, '/', 0, 'V', 0, 'F', 0,
-    'N', 0, 'G', 0, 'D', 0, 'o', 0,
-    'c', 0, 'u', 0, 'm', 0, 'e', 0,
-    'n', 0, 't', 0, '>', 0, 0x0d, 0,
-    0x0a, 0
-  };
   unsigned int j;
-  for(j=(buffer_size/2>sizeof(axp_footer)?buffer_size/2-sizeof(axp_footer):0);
-      j+sizeof(axp_footer) < buffer_size;
+  /*@ assert file_recovery->calculated_file_size <= PHOTOREC_MAX_FILE_SIZE; */
+  /*@ assert file_recovery->file_size <= PHOTOREC_MAX_FILE_SIZE; */
+  /*@
+    @ loop assigns j, file_recovery->calculated_file_size;
+    @ loop variant buffer_size - (j+sizeof(axp_footer));
+    @*/
+  for(j=buffer_size/2-sizeof(axp_footer);
+      j+sizeof(axp_footer) <= buffer_size;
       j++)
   {
     if(buffer[j]=='<' && memcmp((const char *)&buffer[j], axp_footer, sizeof(axp_footer))==0)
     {
-      file_recovery->calculated_file_size+=j-buffer_size/2+sizeof(axp_footer);
+      file_recovery->calculated_file_size+=j+sizeof(axp_footer)-buffer_size/2;
       return DC_STOP;
     }
   }
@@ -65,12 +92,23 @@ static data_check_t data_check_axp(const unsigned char *buffer, const unsigned i
   return DC_CONTINUE;
 }
 
+/*@
+  @ requires separation: \separated(&file_hint_axp, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ terminates \true;
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_axp(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   reset_file_recovery(file_recovery_new);
   file_recovery_new->extension=file_hint_axp.extension;
-  file_recovery_new->data_check=&data_check_axp;
-  file_recovery_new->file_check=&file_check_size;
+  file_recovery_new->min_filesize=0x70+34;
+  file_recovery_new->file_check=&file_check_axp;
+  if(file_recovery_new->blocksize >= 0x34)
+  {
+    file_recovery_new->data_check=&data_check_axp;
+  }
   return 1;
 }
 
@@ -94,3 +132,4 @@ static void register_header_check_axp(file_stat_t *file_stat)
   };
   register_header_check(0, axp_header, sizeof(axp_header), &header_check_axp, file_stat);
 }
+#endif

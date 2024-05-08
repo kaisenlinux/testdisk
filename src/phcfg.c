@@ -43,7 +43,7 @@
 #include "log.h"
 #include "phcfg.h"
 
-void reset_list_file_enable(file_enable_t *files_enable)
+void reset_array_file_enable(file_enable_t *files_enable)
 {
   file_enable_t *file_enable;
   for(file_enable=files_enable;file_enable->file_hint!=NULL;file_enable++)
@@ -81,23 +81,11 @@ static FILE *file_options_save_aux(void)
     }
   }
 #endif
-#ifndef DJGPP
+#if !defined(DJGPP) && !defined(DISABLED_FOR_FRAMAC)
   if(filename==NULL)
   {
     char *home;
     home = getenv("HOME");
-#if 0
-    /* Using 'getpwuid' in statically linked applications requires at
-       runtime the shared libraries from the glibc version used for linking
-    */
-    if (home == NULL) 
-    {
-      struct passwd *pw;
-      pw = getpwuid(getuid());
-      if (pw != NULL)
-	home = pw->pw_dir;
-    }
-#endif
     if (home != NULL)
     {
       filename=(char*)MALLOC(strlen(home)+strlen(DOT_PHOTOREC_CFG)+1);
@@ -157,22 +145,10 @@ static FILE *file_options_load_aux(void)
     }
   }
 #endif
-#ifndef DJGPP
+#if !defined(DJGPP) && !defined(DISABLED_FOR_FRAMAC)
   {
     char *home;
     home = getenv("HOME");
-#if 0
-    /* Using 'getpwuid' in statically linked applications requires at
-       runtime the shared libraries from the glibc version used for linking
-    */
-    if (home == NULL) 
-    {
-      struct passwd *pw;
-      pw = getpwuid(getuid());
-      if (pw != NULL)
-	home = pw->pw_dir;
-    }
-#endif
     if (home != NULL)
     {
       FILE*handle;
@@ -208,7 +184,12 @@ int file_options_save(const file_enable_t *files_enable)
   handle=file_options_save_aux();
   if(handle==NULL)
     return -1;
+  /*@
+    @ loop invariant \valid_read(files_enable);
+    @*/
   for(file_enable=&files_enable[0];file_enable->file_hint!=NULL;file_enable++)
+  {
+    /*@ assert \valid_read(file_enable); */
     if(file_enable->file_hint->extension!=NULL)
     {
       if(file_enable->enable==0)
@@ -216,6 +197,7 @@ int file_options_save(const file_enable_t *files_enable)
       else
 	fprintf(handle, "%s,enable\n", file_enable->file_hint->extension);
     }
+  }
   fclose(handle);
   return 0;
 }
@@ -232,6 +214,9 @@ int file_options_load(file_enable_t *files_enable)
   {
     const char *extension=&buffer[0];
     char *extension_status;
+#ifdef __FRAMAC__
+  Frama_C_make_unknown(buffer, sizeof(buffer)-1);
+#endif
     buffer[sizeof(buffer)-1]='\0';
     extension_status=strchr(buffer,',');
     if(extension_status!=NULL)

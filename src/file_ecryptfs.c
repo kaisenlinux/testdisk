@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_ecryptfs)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,8 +32,8 @@
 #include "filegen.h"
 #include "common.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_ecryptfs(file_stat_t *file_stat);
-static int header_check_ecryptfs(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
 
 const file_hint_t file_hint_ecryptfs= {
   .extension="eCryptfs",
@@ -55,11 +56,12 @@ struct ecrypfs_header {
   uint32_t flags;
 } __attribute__ ((gcc_struct, __packed__));
 
-static void register_header_check_ecryptfs(file_stat_t *file_stat)
-{
-  register_header_check(0, ecryptfs_header, sizeof(ecryptfs_header), &header_check_ecryptfs, file_stat);
-}
-
+/*@
+  @ requires file_recovery->file_check == &file_check_ecryptfs;
+  @ requires valid_file_check_param(file_recovery);
+  @ ensures  valid_file_check_result(file_recovery);
+  @ assigns  file_recovery->file_size;
+  @*/
 static void file_check_ecryptfs(file_recovery_t *file_recovery)
 {
   if(file_recovery->file_size < file_recovery->calculated_file_size)
@@ -68,12 +70,20 @@ static void file_check_ecryptfs(file_recovery_t *file_recovery)
     file_recovery->file_size=file_recovery->calculated_file_size+1024*1024;
 }
 
+/*@
+  @ requires buffer_size >= sizeof(struct ecrypfs_header);
+  @ requires separation: \separated(&file_hint_ecryptfs, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_ecryptfs(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct ecrypfs_header *e=(const struct ecrypfs_header *)buffer;
+  const uint64_t unencrypted_file_size=be64(e->unencrypted_file_size);
   if((be32(e->marker1) ^ be32(e->marker2)) != 0x3c81b7f5)
     return 0;
-  if(be64(e->unencrypted_file_size) < sizeof(struct ecrypfs_header))
+  if(unencrypted_file_size < sizeof(struct ecrypfs_header))
     return 0;
   reset_file_recovery(file_recovery_new);
 #ifdef DJGPP
@@ -81,9 +91,15 @@ static int header_check_ecryptfs(const unsigned char *buffer, const unsigned int
 #else
   file_recovery_new->extension=file_hint_ecryptfs.extension;
 #endif
-  file_recovery_new->min_filesize=be64(e->unencrypted_file_size);
-  file_recovery_new->calculated_file_size=be64(e->unencrypted_file_size);
+  file_recovery_new->min_filesize=unencrypted_file_size;
+  file_recovery_new->calculated_file_size=unencrypted_file_size;
   file_recovery_new->data_check=NULL;
   file_recovery_new->file_check=&file_check_ecryptfs;
   return 1;
 }
+
+static void register_header_check_ecryptfs(file_stat_t *file_stat)
+{
+  register_header_check(0, ecryptfs_header, sizeof(ecryptfs_header), &header_check_ecryptfs, file_stat);
+}
+#endif

@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_hfsp)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -30,8 +31,9 @@
 #include "types.h"
 #include "filegen.h"
 #include "common.h"
-#include "hfsp.h"
+#include "hfsp_struct.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_hfsp(file_stat_t *file_stat);
 
 const file_hint_t file_hint_hfsp= {
@@ -43,12 +45,19 @@ const file_hint_t file_hint_hfsp= {
   .register_header_check=&register_header_check_hfsp
 };
 
+/*@
+  @ requires buffer_size >= sizeof(struct hfsp_vh);
+  @ requires separation: \separated(&file_hint_hfsp, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_hfsp(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct hfsp_vh *vh=(const struct hfsp_vh *)buffer;
   if (!(be32(vh->blocksize)%512==0 && be32(vh->blocksize)!=0 && be32(vh->free_blocks)<=be32(vh->total_blocks)))
     return 0;
-reset_file_recovery(file_recovery_new);
+  reset_file_recovery(file_recovery_new);
   file_recovery_new->extension=file_hint_hfsp.extension;
   return 1;
 }
@@ -56,6 +65,9 @@ reset_file_recovery(file_recovery_new);
 static void register_header_check_hfsp(file_stat_t *file_stat)
 {
   register_header_check(0, "H+\0\4", 4, &header_check_hfsp, file_stat);
+#ifndef DISABLED_FOR_FRAMAC
   register_header_check(0, "HX\0\5", 4, &header_check_hfsp, file_stat);
+#endif
 }
 
+#endif

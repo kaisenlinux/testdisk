@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_ra)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,6 +32,7 @@
 #include "common.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_ra(file_stat_t *file_stat);
 
 const file_hint_t file_hint_ra= {
@@ -49,7 +51,9 @@ struct ra3_header {
   char unk1[10];
   uint32_t data_size;
   uint8_t title_length;
+#if 0
   char title[0];
+#endif
 } __attribute__ ((gcc_struct, __packed__));
 
 struct ra4_header {
@@ -77,9 +81,19 @@ struct ra4_header {
   char	   FourCC_string[4];
   char     unk4[3];
   uint8_t  title_length;
+#if 0
   char     title[0];
+#endif
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires buffer_size >= sizeof(struct ra3_header);
+  @ requires buffer_size >= sizeof(struct ra4_header);
+  @ requires separation: \separated(&file_hint_ra, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_ra(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   if(buffer[4]==0x00 && buffer[5]==0x03)
@@ -111,3 +125,4 @@ static void register_header_check_ra(file_stat_t *file_stat)
   static const unsigned char ra_header[4]  = { '.', 'r', 'a', 0xfd};
   register_header_check(0, ra_header,sizeof(ra_header), &header_check_ra, file_stat);
 }
+#endif

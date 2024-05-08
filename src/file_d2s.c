@@ -19,6 +19,7 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_d2s)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -30,6 +31,7 @@
 #include "common.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_d2s(file_stat_t *file_stat);
 
 const file_hint_t file_hint_d2s= {
@@ -46,9 +48,14 @@ struct d2s_header {
   uint32_t size;
   uint32_t unk1;
   uint32_t unk2;
-  char name[0];
+//  char name[0];
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires file_recovery->file_rename==&file_rename_d2s;
+  @ requires valid_file_rename_param(file_recovery);
+  @ ensures  valid_file_rename_result(file_recovery);
+  @*/
 static void file_rename_d2s(file_recovery_t *file_recovery)
 {
   unsigned char buffer[512];
@@ -61,6 +68,13 @@ static void file_rename_d2s(file_recovery_t *file_recovery)
   file_rename(file_recovery, buffer, buffer_size, 0x14, NULL, 1);
 }
 
+/*@
+  @ requires buffer_size >= sizeof(struct d2s_header);
+  @ requires separation: \separated(&file_hint_d2s, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_d2s(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct d2s_header *d2s=(const struct d2s_header*)buffer;
@@ -82,3 +96,4 @@ static void register_header_check_d2s(file_stat_t *file_stat)
   };
   register_header_check(0, d2s_header,sizeof(d2s_header), &header_check_d2s, file_stat);
 }
+#endif

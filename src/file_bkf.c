@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_bkf)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -32,12 +33,15 @@
 #include "common.h"
 #include "log.h"
 
+/*@
+  @ requires valid_register_header_check(file_stat);
+  @*/
 static void register_header_check_bkf(file_stat_t *file_stat);
 
 const file_hint_t file_hint_bkf= {
   .extension="bkf",
   .description="MS Backup file",
-  .max_filesize=-1,
+  .max_filesize=PHOTOREC_MAX_FILE_SIZE,
   .recover=1,
   .enable_by_default=1,
   .register_header_check=&register_header_check_bkf
@@ -62,12 +66,32 @@ struct mtf_db_hdr
   uint16_t	check;		/* header checksum */
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires file_recovery->file_check == &file_check_bkf;
+  @ requires valid_file_check_param(file_recovery);
+  @ ensures  valid_file_check_result(file_recovery);
+  @ assigns *file_recovery->handle, errno, file_recovery->file_size;
+  @ assigns Frama_C_entropy_source;
+  @*/
 static void file_check_bkf(file_recovery_t *file_recovery)
 {
   const unsigned char bkf_footer[4]= { 'S', 'F', 'M', 'B'};
   file_search_footer(file_recovery, bkf_footer, sizeof(bkf_footer), 0x400-4);
 }
 
+/*@
+  @ requires buffer_size >= sizeof(struct mtf_db_hdr);
+  @ requires separation: \separated(&file_hint_bkf, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ ensures (\result == 1) ==> file_recovery_new->file_size == 0;
+  @ ensures (\result == 1) ==> (file_recovery_new->time == 0);
+  @ ensures (\result == 1) ==> (file_recovery_new->calculated_file_size == 0);
+  @ ensures (\result == 1) ==> (file_recovery_new->min_filesize == 52);
+  @ ensures (\result == 1) ==> (file_recovery_new->extension == file_hint_bkf.extension);
+  @ ensures (\result == 1) ==> (file_recovery_new->file_check == &file_check_bkf);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_bkf(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct mtf_db_hdr *hdr=(const struct mtf_db_hdr *)buffer;
@@ -94,3 +118,4 @@ static void register_header_check_bkf(file_stat_t *file_stat)
   static const unsigned char bkf_header[4]= { 'T','A','P','E'};
   register_header_check(0, bkf_header,sizeof(bkf_header), &header_check_bkf, file_stat);
 }
+#endif

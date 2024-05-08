@@ -46,12 +46,12 @@ static void set_HPFS_info(partition_t *partition)
   partition->upart_type=UP_HPFS;
 }
 
-static int test_HPFS(disk_t *disk_car, const struct fat_boot_sector *hpfs_header, const partition_t *partition, const int verbose, const int dump_ind)
+static int test_HPFS(const disk_t *disk_car, const struct fat_boot_sector *hpfs_header, const partition_t *partition, const int verbose, const int dump_ind)
 {
   const char*buffer=(const char*)hpfs_header;
   if(le16(hpfs_header->marker)==0xAA55)
   {
-    if(memcmp(buffer+OS2_NAME,"IBM",3)==0)
+    if(memcmp(buffer+3,"IBM",3)==0)
     {   /* D'apres une analyse de OS2 sur systeme FAT...
            FAT_NAME1=FAT
          */
@@ -70,7 +70,7 @@ static int test_HPFS(disk_t *disk_car, const struct fat_boot_sector *hpfs_header
   return 1;
 }
 
-int recover_HPFS(disk_t *disk_car, const struct fat_boot_sector *hpfs_header, partition_t *partition, const int verbose)
+int recover_HPFS(const disk_t *disk_car, const struct fat_boot_sector *hpfs_header, partition_t *partition, const int verbose)
 {
   if(test_HPFS(disk_car, hpfs_header, partition, verbose,0)!=0)
     return 1;

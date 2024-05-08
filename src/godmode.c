@@ -53,29 +53,20 @@
 #define RO 1
 #define RW 0
 #define MAX_SEARCH_LOCATION 1024
+extern const arch_fnct_t arch_none;
 extern const arch_fnct_t arch_gpt;
 extern const arch_fnct_t arch_humax;
 extern const arch_fnct_t arch_i386;
 extern const arch_fnct_t arch_mac;
-extern const arch_fnct_t arch_none;
 extern const arch_fnct_t arch_sun;
 extern const arch_fnct_t arch_xbox;
-static int use_backup(disk_t *disk_car, const list_part_t *list_part, const int verbose,const int dump_ind, const unsigned int expert, char**current_cmd);
-static int interface_part_bad_log(disk_t *disk_car,list_part_t *list_part_bad);
 #ifdef HAVE_NCURSES
-static int interface_part_bad_ncurses(disk_t *disk_car, list_part_t *list_part_bad);
-static void ask_mbr_order_i386(disk_t *disk_car,list_part_t *list_part);
 #define ANALYSE_X	0
 #define ANALYSE_Y	5
 #define INTER_BAD_PART	10
 #endif
-static list_part_t *add_ext_part_i386(disk_t *disk_car, list_part_t *list_part, const int max_ext, const int verbose);
-static void hint_insert(uint64_t *tab, const uint64_t offset, unsigned int *tab_nbr);
-/* Optimization */
-static inline uint64_t CHS2offset_inline(const disk_t *disk_car,const CHS_t*CHS);
-static list_part_t *search_part(disk_t *disk_car, const list_part_t *list_part_org, const int verbose, const int dump_ind, const int fast_mode, char **current_cmd);
-static inline void offset2CHS_inline(const disk_t *disk_car,const uint64_t offset, CHS_t*CHS);
 
+/* Optimization */
 static inline void offset2CHS_inline(const disk_t *disk_car,const uint64_t offset, CHS_t*CHS)
 {
   uint64_t pos=offset/disk_car->sector_size;
@@ -106,7 +97,7 @@ static unsigned int align_structure_aux(const uint64_t offset, const disk_t *dis
   if(offset % (1024*1024) == 0)
     return 1024*1024;
   tmp=disk->geom.heads_per_cylinder * disk->geom.sectors_per_head * disk->sector_size;
-  if(offset % tmp == 0 || offset % tmp == disk->geom.sectors_per_head * disk->sector_size)
+  if(offset % tmp == 0 || offset % tmp == (uint64_t)disk->geom.sectors_per_head * disk->sector_size)
     return tmp;
   tmp= disk->geom.sectors_per_head * disk->sector_size;
   if(offset % tmp == 0)
@@ -160,7 +151,7 @@ static void align_structure(list_part_t *list_part, const disk_t *disk, const un
   }
 }
 
-void only_one_bootable( list_part_t *list_part, list_part_t *part_boot)
+void only_one_bootable( list_part_t *list_part, const list_part_t *part_boot)
 {
   list_part_t *element;
   if(part_boot->part->status==STATUS_PRIM_BOOT)
@@ -198,11 +189,11 @@ static int interface_part_bad_ncurses(disk_t *disk_car, list_part_t *list_part)
     char buffer_disk_size_found[100];
     size_to_unit(disk_car->disk_size, buffer_disk_size);
     size_to_unit(disk_size, buffer_disk_size_found);
-    wprintw(stdscr,"The harddisk (%s) seems too small! (< %s)",
+    wprintw(stdscr,"The hard disk (%s) seems too small! (< %s)",
 	buffer_disk_size, buffer_disk_size_found);
   }
   wmove(stdscr,7,0);
-  wprintw(stdscr,"Check the harddisk size: HD jumper settings, BIOS detection...");
+  wprintw(stdscr,"Check the hard disk size: HD jumper settings, BIOS detection...");
 #if defined(__CYGWIN__) || defined(__MINGW32__)
   if(disk_car->disk_size<=((uint64_t)1<<(28-1)) && disk_size>=((uint64_t)1<<(28-1)))
   {
@@ -321,7 +312,7 @@ static int interface_part_bad_log(disk_t *disk_car, list_part_t *list_part)
     }
   }
   log_warning("%s\n",disk_car->description(disk_car));
-  log_warning("Check the harddisk size: HD jumper settings, BIOS detection...\n");
+  log_warning("Check the hard disk size: HD jumper settings, BIOS detection...\n");
 #if defined(__CYGWIN__) || defined(__MINGW32__)
   if(disk_car->disk_size<=((uint64_t)1<<(28-1)) && disk_size>=((uint64_t)1<<(28-1)))
   {
@@ -333,7 +324,7 @@ static int interface_part_bad_log(disk_t *disk_car, list_part_t *list_part)
     char buffer_disk_size_found[100];
     size_to_unit(disk_car->disk_size, buffer_disk_size);
     size_to_unit(disk_size, buffer_disk_size_found);
-    log_warning("The harddisk (%s) seems too small! (< %s)\n",
+    log_warning("The hard disk (%s) seems too small! (< %s)\n",
 	buffer_disk_size, buffer_disk_size_found);
   }
   if(list_part->next==NULL)
@@ -408,18 +399,18 @@ static void search_add_hints(const disk_t *disk, uint64_t *try_offset, unsigned 
     /* 1/[01]/1 CHS x  16 63 */
     hint_insert(try_offset, 16 * 63 * disk->sector_size, try_offset_nbr);
     hint_insert(try_offset, 17 * 63 * disk->sector_size, try_offset_nbr);
-    hint_insert(try_offset, 16 * disk->geom.sectors_per_head * disk->sector_size, try_offset_nbr);
-    hint_insert(try_offset, 17 * disk->geom.sectors_per_head * disk->sector_size, try_offset_nbr);
+    hint_insert(try_offset, (uint64_t)16 * disk->geom.sectors_per_head * disk->sector_size, try_offset_nbr);
+    hint_insert(try_offset, (uint64_t)17 * disk->geom.sectors_per_head * disk->sector_size, try_offset_nbr);
     /* 1/[01]/1 CHS x 240 63 */
     hint_insert(try_offset, 240 * 63 * disk->sector_size, try_offset_nbr);
     hint_insert(try_offset, 241 * 63 * disk->sector_size, try_offset_nbr);
-    hint_insert(try_offset, 240 * disk->geom.sectors_per_head * disk->sector_size, try_offset_nbr);
-    hint_insert(try_offset, 241 * disk->geom.sectors_per_head * disk->sector_size, try_offset_nbr);
+    hint_insert(try_offset, (uint64_t)240 * disk->geom.sectors_per_head * disk->sector_size, try_offset_nbr);
+    hint_insert(try_offset, (uint64_t)241 * disk->geom.sectors_per_head * disk->sector_size, try_offset_nbr);
     /* 1/[01]/1 CHS x 255 63 */
     hint_insert(try_offset, 255 * 63 * disk->sector_size, try_offset_nbr);
     hint_insert(try_offset, 256 * 63 * disk->sector_size, try_offset_nbr);
-    hint_insert(try_offset, 255 * disk->geom.sectors_per_head * disk->sector_size, try_offset_nbr);
-    hint_insert(try_offset, 256 * disk->geom.sectors_per_head * disk->sector_size, try_offset_nbr);
+    hint_insert(try_offset, (uint64_t)255 * disk->geom.sectors_per_head * disk->sector_size, try_offset_nbr);
+    hint_insert(try_offset, (uint64_t)256 * disk->geom.sectors_per_head * disk->sector_size, try_offset_nbr);
     /* Hints for NTFS backup */
     if(disk->geom.cylinders>1)
     {
@@ -509,11 +500,14 @@ static void search_NTFS_from_backup(disk_t *disk_car, list_part_t *list_part, co
       unsigned int i;
       for(i=32;i>0;i--)
       {
-	partition->part_size=(uint64_t)0;
-	partition->part_offset=element->part->part_offset - i * disk_car->sector_size;
-	if(disk_car->pread(disk_car, buffer_disk, DEFAULT_SECTOR_SIZE, partition->part_offset)==DEFAULT_SECTOR_SIZE)
+	const uint64_t tmp=i * disk_car->sector_size;
+	if(element->part->part_offset > tmp)
 	{
-	  if(recover_NTFS(disk_car, (const struct ntfs_boot_sector*)buffer_disk, partition, verbose, dump_ind, 0)==0)
+	  partition_reset(partition, disk_car->arch);
+	  partition->part_size=(uint64_t)0;
+	  partition->part_offset=element->part->part_offset - tmp;
+	  if(disk_car->pread(disk_car, buffer_disk, DEFAULT_SECTOR_SIZE, partition->part_offset)==DEFAULT_SECTOR_SIZE &&
+	      recover_NTFS(disk_car, (const struct ntfs_boot_sector*)buffer_disk, partition, verbose, dump_ind, 0)==0)
 	  {
 	    partition->status=STATUS_DELETED;
 	    if(disk_car->arch->is_part_known(partition)!=0 && partition->part_size>1 &&
@@ -527,7 +521,6 @@ static void search_NTFS_from_backup(disk_t *disk_car, list_part_t *list_part, co
 	      if(insert_error>0)
 		free(new_partition);
 	    }
-	    partition_reset(partition, disk_car->arch);
 	  }
 	}
       }
@@ -537,7 +530,7 @@ static void search_NTFS_from_backup(disk_t *disk_car, list_part_t *list_part, co
   free(buffer_disk);
 }
 
-typedef enum { INDSTOP_CONTINUE=0, INDSTOP_STOP=1, INDSTOP_SKIP=2, INDSTOP_QUIT=3 } indstop_t;
+typedef enum { INDSTOP_CONTINUE=0, INDSTOP_STOP=1, INDSTOP_SKIP=2, INDSTOP_QUIT=3, INDSTOP_PLUS=4 } indstop_t;
 
 static list_part_t *search_part(disk_t *disk_car, const list_part_t *list_part_org, const int verbose, const int dump_ind, const int fast_mode, char **current_cmd)
 {
@@ -593,6 +586,7 @@ static list_part_t *search_part(disk_t *disk_car, const list_part_t *list_part_o
   while(ind_stop!=INDSTOP_QUIT && search_location < search_location_max)
   {
     CHS_t start;
+    int ask=0;
     offset2CHS_inline(disk_car,search_location,&start);
 #ifdef HAVE_NCURSES
     if(disk_car->geom.heads_per_cylinder>1)
@@ -602,19 +596,10 @@ static list_part_t *search_part(disk_t *disk_car, const list_part_t *list_part_o
 	old_cylinder=start.cylinder;
 	wmove(stdscr,ANALYSE_Y,ANALYSE_X);
 	wclrtoeol(stdscr);
-	wprintw(stdscr,"Analyse cylinder %5u/%u: %02u%%",
+	wprintw(stdscr, "Analyse cylinder %5lu/%lu: %02u%%",
 	    start.cylinder, disk_car->geom.cylinders-1,
 	    (unsigned int)(search_location*100/disk_car->disk_size));
-	wrefresh(stdscr);
-	switch(check_enter_key_or_s(stdscr))
-	{
-	  case 1:
-	    ind_stop=INDSTOP_STOP;
-	    break;
-	  case 2:
-	    ind_stop=INDSTOP_SKIP;
-	    break;
-	}
+	ask=1;
       }
     }
     else if((start.cylinder & 0x7FFF)==0)
@@ -626,13 +611,26 @@ static list_part_t *search_part(disk_t *disk_car, const list_part_t *list_part_o
 	  (long long unsigned)((disk_car->disk_size-1)/disk_car->sector_size),
 	    (unsigned int)(search_location*100/disk_car->disk_size));
       wrefresh(stdscr);
+      ask=1;
+    }
+    if(ask!=0)
+    {
+      wrefresh(stdscr);
       switch(check_enter_key_or_s(stdscr))
       {
 	case 1:
-	  ind_stop=INDSTOP_STOP;
+	  if(ask_confirmation("Stop searching for more partitions ? (Y/N)")!=0)
+	    ind_stop=INDSTOP_STOP;
+	  else
+	  {
+	    screen_buffer_to_interface();
+	  }
 	  break;
 	case 2:
 	  ind_stop=INDSTOP_SKIP;
+	  break;
+	case 3:
+	  ind_stop=INDSTOP_PLUS;
 	  break;
       }
     }
@@ -846,7 +844,7 @@ static list_part_t *search_part(disk_t *disk_car, const list_part_t *list_part_o
 #ifdef HAVE_NCURSES
 	  wmove(stdscr,ANALYSE_Y+1,ANALYSE_X);
 	  wclrtoeol(stdscr);
-	  wprintw(stdscr,msg_READ_ERROR_AT, start.cylinder,start.head,start.sector,(unsigned long)(partition->part_offset/disk_car->sector_size));
+	  wprintw(stdscr, "Read error at %lu/%u/%u (lba=%lu)\n", start.cylinder,start.head,start.sector,(unsigned long)(partition->part_offset/disk_car->sector_size));
 #endif
 	  /* Stop reading after the end of the disk */
 	  if(search_location >= disk_car->disk_real_size)
@@ -947,6 +945,11 @@ static list_part_t *search_part(disk_t *disk_car, const list_part_t *list_part_o
       ind_stop=INDSTOP_CONTINUE;
       if(try_offset_nbr>0 && search_location < try_offset[0])
 	search_location=try_offset[0];
+    }
+    else if(ind_stop==INDSTOP_PLUS)
+    {
+      ind_stop=INDSTOP_CONTINUE;
+      search_location += search_location_max / 20 / (1024 * 1024) * (1024 * 1014);
     }
     else if(ind_stop==INDSTOP_STOP)
     {
@@ -1124,7 +1127,7 @@ static list_part_t *reduce_structure(const list_part_t *list_part_org)
   return list_part;
 }
 
-static list_part_t *add_ext_part_i386(disk_t *disk, list_part_t *list_part, const int max_ext, const int verbose)
+static list_part_t *add_ext_part_i386(const disk_t *disk, list_part_t *list_part, const int max_ext, const int verbose)
 {
   /* list_part need to be sorted! */
   /* All extended partitions of an P_EXTENDX are P_EXTENDED */
@@ -1349,6 +1352,13 @@ static void warning_geometry(const list_part_t *list_part, disk_t *disk, const i
   }
 }
 
+/*@
+  @ requires valid_list_part(list_part_org);
+  @ requires valid_disk(disk_car);
+  @ requires \valid(current_cmd);
+  @ requires \valid(menu);
+  @ requires \valid(fast_mode);
+  @*/
 static int ask_write_partition_table(const list_part_t *list_part_org, disk_t *disk_car, const int verbose, const int dump_ind, const int ask_part_order, const unsigned int expert, char **current_cmd, unsigned int *menu, int *fast_mode)
 {
   int res_interface_write;

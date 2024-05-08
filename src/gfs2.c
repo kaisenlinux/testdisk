@@ -40,7 +40,7 @@ static void set_gfs2_info(partition_t *partition)
   partition->info[0]='\0';
 }
 
-static int test_gfs2(disk_t *disk, const struct gfs2_sb *sb, const partition_t *partition, const int dump_ind)
+static int test_gfs2(const disk_t *disk, const struct gfs2_sb *sb, const partition_t *partition, const int dump_ind)
 {
   if(sb->sb_header.mh_magic != be32(GFS2_MAGIC))
     return 1;
@@ -78,7 +78,7 @@ int check_gfs2(disk_t *disk, partition_t *partition)
   return 0;
 }
 
-int recover_gfs2(disk_t *disk, const struct gfs2_sb *sb, partition_t *partition, const int dump_ind)
+int recover_gfs2(const disk_t *disk, const struct gfs2_sb *sb, partition_t *partition, const int dump_ind)
 {
   if(test_gfs2(disk,sb,partition,dump_ind)!=0)
     return 1;

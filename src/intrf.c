@@ -68,6 +68,7 @@ int intr_nbr_line=0;
 
 int screen_buffer_add(const char *_format, ...)
 {
+#ifndef DISABLED_FOR_FRAMAC
   char tmp[BUFFER_LINE_LENGTH+1];
   const char *start=tmp;
   va_list ap;
@@ -99,9 +100,15 @@ int screen_buffer_add(const char *_format, ...)
     log_warning("Buffer can't store more than %d lines.\n", MAX_LINES);
     intr_nbr_line++;
   }
+#endif
   return 0;
 }
 
+/*@
+  @ ensures intr_nbr_line == 0;
+  @ assigns intr_nbr_line;
+  @ assigns intr_buffer_screen[0 .. MAX_LINES-1][ 0 .. BUFFER_LINE_LENGTH];
+  @*/
 void screen_buffer_reset(void)
 {
   intr_nbr_line=0;
@@ -114,6 +121,9 @@ void screen_buffer_to_log(void)
   if(intr_buffer_screen[intr_nbr_line][0]!='\0')
     intr_nbr_line++;
   /* to log file */
+  /*@
+    @ loop variant intr_nbr_line - i;
+    @*/
   for(i=0;i<intr_nbr_line;i++)
     log_info("%s\n",intr_buffer_screen[i]);
 }
@@ -140,11 +150,17 @@ const char *aff_part_aux(const unsigned int newline, const disk_t *disk_car, con
   const arch_fnct_t *arch=partition->arch;
   if(arch==NULL)
   {
+#ifndef DISABLED_FOR_FRAMAC
     log_error("BUG: No arch for a partition\n");
+#endif
     msg[0]='\0';
     return msg;
   }
   msg[sizeof(msg)-1]=0;
+#ifdef DISABLED_FOR_FRAMAC
+  msg[0]='T';
+  msg[1]='\0';
+#else
   if((newline&AFF_PART_ORDER)==AFF_PART_ORDER)
   {
     if(partition->status!=STATUS_EXT_IN_EXT && partition->order!=NO_ORDER)
@@ -189,6 +205,7 @@ const char *aff_part_aux(const unsigned int newline, const disk_t *disk_car, con
     pos+=snprintf(&msg[pos],sizeof(msg)-pos-1, " [%s]",partition->partname);
   if(partition->fsname[0]!='\0')
     snprintf(&msg[pos],sizeof(msg)-pos-1, " [%s]",partition->fsname);
+#endif
   return msg;
 }
 
@@ -201,6 +218,10 @@ const char *aff_part_aux(const unsigned int newline, const disk_t *disk_car, con
 uint64_t atouint64(const char *nptr)
 {
   uint64_t tmp=0;
+  /*@
+    @ loop invariant valid_read_string(nptr);
+    @ loop assigns tmp, nptr;
+    @*/
   while(*nptr >='0' && *nptr <= '9')
   {
     tmp = tmp * 10 + *nptr - '0';
@@ -211,13 +232,17 @@ uint64_t atouint64(const char *nptr)
 
 uint64_t ask_number_cli(char **current_cmd, const uint64_t val_cur, const uint64_t val_min, const uint64_t val_max, const char * _format, ...)
 {
+  /*@ assert \valid(current_cmd); */
   if(*current_cmd!=NULL)
   {
     uint64_t tmp_val;
     skip_comma_in_command(current_cmd);
+    /*@ assert valid_read_string(*current_cmd); */
     tmp_val = get_int_from_command(current_cmd);
+    /*@ assert valid_read_string(*current_cmd); */
     if (val_min==val_max || (tmp_val >= val_min && tmp_val <= val_max))
       return tmp_val;
+#ifndef DISABLED_FOR_FRAMAC
     else
     {
       char res[200];
@@ -230,7 +255,9 @@ uint64_t ask_number_cli(char **current_cmd, const uint64_t val_cur, const uint64
       log_error("Invalid value\n");
       va_end(ap);
     }
+#endif
   }
+  /*@ assert valid_read_string(*current_cmd); */
   return val_cur;
 }
 
@@ -250,5 +277,7 @@ void log_CHS_from_LBA(const disk_t *disk_car, const unsigned long int pos_LBA)
   tmp=pos_LBA/tmp;
   cylinder=tmp / disk_car->geom.heads_per_cylinder;
   head=tmp % disk_car->geom.heads_per_cylinder;
+#ifndef DISABLED_FOR_FRAMAC
   log_info("%lu/%lu/%lu", cylinder, head, sector);
+#endif
 }

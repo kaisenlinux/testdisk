@@ -55,7 +55,7 @@ int check_HFS(disk_t *disk_car,partition_t *partition,const int verbose)
   return 0;
 }
 
-int recover_HFS(disk_t *disk_car, const hfs_mdb_t *hfs_mdb,partition_t *partition,const int verbose, const int dump_ind, const int backup)
+int recover_HFS(const disk_t *disk_car, const hfs_mdb_t *hfs_mdb,partition_t *partition,const int verbose, const int dump_ind, const int backup)
 {
   uint64_t part_size;
   if(test_HFS(disk_car,hfs_mdb,partition,verbose,dump_ind)!=0)
@@ -83,7 +83,7 @@ int recover_HFS(disk_t *disk_car, const hfs_mdb_t *hfs_mdb,partition_t *partitio
   return 0;
 }
 
-int test_HFS(disk_t *disk_car, const hfs_mdb_t *hfs_mdb, const partition_t *partition, const int verbose, const int dump_ind)
+int test_HFS(const disk_t *disk_car, const hfs_mdb_t *hfs_mdb, const partition_t *partition, const int verbose, const int dump_ind)
 {
   /* Check for HFS signature */
   if (hfs_mdb->drSigWord!=be16(HFS_SUPER_MAGIC))

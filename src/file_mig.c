@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_mig)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -34,6 +35,7 @@
 #include "log.h"
 #endif
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_mig(file_stat_t *file_stat);
 
 const file_hint_t file_hint_mig= {
@@ -53,16 +55,32 @@ struct MIG_HDR
   uint32_t unk1;
   uint32_t unk2;
   uint32_t unk3;
+#ifndef DISABLED_FOR_FRAMAC
   unsigned char fn[0];
+#endif
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires file_recovery->file_check == &file_check_mig;
+  @ requires \separated(file_recovery, file_recovery->handle, file_recovery->extension, &errno, &Frama_C_entropy_source);
+  @ requires valid_file_check_param(file_recovery);
+  @ ensures  valid_file_check_result(file_recovery);
+  @ assigns *file_recovery->handle, errno, file_recovery->file_size;
+  @ assigns Frama_C_entropy_source;
+  @*/
 static void file_check_mig(file_recovery_t *file_recovery)
 {
-  struct MIG_HDR h;
   uint64_t offset=0x34;
   file_recovery->file_size=0;
+  /*@
+    @ loop assigns *file_recovery->handle, errno, file_recovery->file_size;
+    @ loop assigns Frama_C_entropy_source;
+    @ loop assigns offset;
+    @*/
   while(1)
   {
+    char buffer[sizeof(struct MIG_HDR)];
+    const struct MIG_HDR *h=(const struct MIG_HDR *)&buffer;
     size_t res;
     if(my_fseek(file_recovery->handle, offset, SEEK_SET) < 0)
     {
@@ -71,7 +89,7 @@ static void file_check_mig(file_recovery_t *file_recovery)
 #endif
       return ;
     }
-    res=fread(&h, 1, sizeof(h), file_recovery->handle);
+    res=fread(&buffer, 1, sizeof(buffer), file_recovery->handle);
     if(res < 8)
     {
 #ifdef DEBUG_MIG
@@ -79,21 +97,29 @@ static void file_check_mig(file_recovery_t *file_recovery)
 #endif
       return ;
     }
-    if(res < sizeof(h) || le32(h.magic)!=0x5354524d)	/* STRM=stream */
+    /* STRM=stream */
+    if(res < sizeof(buffer) || le32(h->magic)!=0x5354524d || offset >= PHOTOREC_MAX_FILE_SIZE)
     {
 #ifdef DEBUG_MIG
-      log_info("0x%lx no magic %x\n", (long unsigned)offset, le32(h.magic));
+      log_info("0x%lx no magic %x\n", (long unsigned)offset, le32(h->magic));
 #endif
       file_recovery->file_size=offset+8;
       return ;
     }
 #ifdef DEBUG_MIG
-    log_info("0x%lx magic s_size=0x%u\n", (long unsigned)offset, le32(h.s_size));
+    log_info("0x%lx magic s_size=0x%u\n", (long unsigned)offset, le32(h->s_size));
 #endif
-    offset+=sizeof(h)+le32(h.s_size);
+    offset+=sizeof(buffer)+le32(h->s_size);
   }
 }
 
+/*@
+  @ requires buffer_size > 0x38;
+  @ requires separation: \separated(&file_hint_mig, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_mig(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   if(memcmp(&buffer[0x34], "MRTS", 4)!=0)
@@ -111,3 +137,4 @@ static void register_header_check_mig(file_stat_t *file_stat)
   };
   register_header_check(0, mig_header, sizeof(mig_header), &header_check_mig, file_stat);
 }
+#endif

@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_icns)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,6 +32,7 @@
 #include "filegen.h"
 #include "common.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_icns(file_stat_t *file_stat);
 
 const file_hint_t file_hint_icns= {
@@ -52,9 +54,13 @@ struct icon_data
 {
   char type[4];
   uint32_t size;
-  uint8_t  data[0];
+//  uint8_t  data[0];
 };
 
+/*@
+  @ requires \valid_read(type + (0 .. 3));
+  @ assigns  \nothing;
+  @*/
 static int check_icon_type(const char *type)
 {
   /* https://en.wikipedia.org/wiki/Apple_Icon_Image_format */
@@ -96,21 +102,30 @@ static int check_icon_type(const char *type)
   return 0;
 }
 
+/*@
+  @ requires buffer_size >= sizeof(struct icns_header) + sizeof(struct icon_data);
+  @ requires separation: \separated(&file_hint_icns, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_icns(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct icns_header *hdr=(const struct icns_header *)buffer;
   const struct icon_data *icon=(const struct icon_data *)&buffer[8];
-  if(be32(hdr->size) < sizeof(struct icns_header))
+  const unsigned int hdr_size=be32(hdr->size);
+  const unsigned int icon_size=be32(icon->size);
+  if(hdr_size < sizeof(struct icns_header))
     return 0;
-  if(be32(icon->size) < sizeof(struct icon_data))
+  if(icon_size < sizeof(struct icon_data))
     return 0;
-  if(8 + be32(icon->size) > be32(hdr->size))
+  if(icon_size > hdr_size - 8)
     return 0;
   if(!check_icon_type(icon->type))
     return 0;
   reset_file_recovery(file_recovery_new);
   file_recovery_new->extension=file_hint_icns.extension;
-  file_recovery_new->calculated_file_size=be32(hdr->size);
+  file_recovery_new->calculated_file_size=hdr_size;
   file_recovery_new->data_check=&data_check_size;
   file_recovery_new->file_check=&file_check_size;
   return 1;
@@ -120,3 +135,4 @@ static void register_header_check_icns(file_stat_t *file_stat)
 {
   register_header_check(0, "icns", 4, &header_check_icns, file_stat);
 }
+#endif

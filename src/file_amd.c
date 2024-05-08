@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_amd)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,9 +32,8 @@
 #include "filegen.h"
 #include "common.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_amd(file_stat_t *file_stat);
-static int header_check_amd(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
-static int header_check_amt(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
 
 const file_hint_t file_hint_amd= {
   .extension="amd",
@@ -44,6 +44,13 @@ const file_hint_t file_hint_amd= {
   .register_header_check=&register_header_check_amd
 };
 
+/*@
+  @ requires buffer_size >= 20;
+  @ requires separation: \separated(&file_hint_amd, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_amd(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   reset_file_recovery(file_recovery_new);
@@ -55,6 +62,13 @@ static int header_check_amd(const unsigned char *buffer, const unsigned int buff
   return 1;
 }
 
+/*@
+  @ requires buffer_size >= 25;
+  @ requires separation: \separated(&file_hint_amd, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_amt(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   reset_file_recovery(file_recovery_new);
@@ -84,3 +98,4 @@ static void register_header_check_amd(file_stat_t *file_stat)
   register_header_check(0, amd_header,sizeof(amd_header), &header_check_amd, file_stat);
   register_header_check(0, amt_header,sizeof(amt_header), &header_check_amt, file_stat);
 }
+#endif

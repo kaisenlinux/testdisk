@@ -19,6 +19,7 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_mfa)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -29,6 +30,7 @@
 #include "types.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_mfa(file_stat_t *file_stat);
 
 const file_hint_t file_hint_mfa= {
@@ -40,12 +42,25 @@ const file_hint_t file_hint_mfa= {
   .register_header_check=&register_header_check_mfa
 };
 
+/*@
+  @ requires file_recovery->file_check == &file_check_mfa;
+  @ requires valid_file_check_param(file_recovery);
+  @ ensures  valid_file_check_result(file_recovery);
+  @ assigns *file_recovery->handle, errno, file_recovery->file_size;
+  @ assigns Frama_C_entropy_source;
+  @*/
 static void file_check_mfa(file_recovery_t *file_recovery)
 {
   const unsigned char mfa_footer[5]= {'!','D','N','E', '!'};
   file_search_footer(file_recovery, mfa_footer, sizeof(mfa_footer), 0x84);
 }
 
+/*@
+  @ requires separation: \separated(&file_hint_mfa, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_mfa(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   reset_file_recovery(file_recovery_new);
@@ -59,3 +74,4 @@ static void register_header_check_mfa(file_stat_t *file_stat)
   static const unsigned char mfa_header[8]= { 'M', 'M', 'F', '2', 0x04, 0x00, 0x00, 0x00};
   register_header_check(0, mfa_header,sizeof(mfa_header), &header_check_mfa, file_stat);
 }
+#endif

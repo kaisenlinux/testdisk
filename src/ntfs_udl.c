@@ -28,6 +28,11 @@
 #include <config.h>
 #endif
 
+#if defined(DISABLED_FOR_FRAMAC)
+#undef HAVE_LIBNTFS
+#undef HAVE_LIBNTFS3G
+#endif
+
 #include <stdio.h>
 #ifdef HAVE_FEATURES_H
 #include <features.h>
@@ -210,7 +215,7 @@ static void free_file(struct ufile *file)
  * Return:	@rec's filename, either same name space as @name or lowest space.
  *		NULL if can't determine parenthood or on error.
  */
-static FILE_NAME_ATTR* verify_parent(struct filename* name, MFT_RECORD* rec)
+static FILE_NAME_ATTR* verify_parent(const struct filename* name, MFT_RECORD* rec)
 {
 	ATTR_RECORD *attr30;
 	FILE_NAME_ATTR *filename_attr = NULL, *lowest_space_name = NULL;
@@ -445,7 +450,7 @@ static int get_filenames(struct ufile *file, ntfs_volume* vol)
  * Return:  n  The number of $FILENAME attributes found
  *	   -1  Error
  */
-static int get_data(struct ufile *file, ntfs_volume *vol)
+static int get_data(struct ufile *file, const ntfs_volume *vol)
 {
 	ATTR_RECORD *rec;
 	ntfs_attr_search_ctx *ctx;
@@ -1217,7 +1222,7 @@ static struct td_list_head *ntfs_prev_non_deleted(struct td_list_head *current_f
   return current_file;
 }
 
-static void ntfs_undelete_menu_ncurses(disk_t *disk_car, const partition_t *partition, dir_data_t *dir_data, file_info_t *dir_list)
+static void ntfs_undelete_menu_ncurses(const disk_t *disk_car, const partition_t *partition, dir_data_t *dir_data, file_info_t *dir_list)
 {
   struct ntfs_dir_struct *ls=(struct ntfs_dir_struct *)dir_data->private_dir_data;
   WINDOW *window=(WINDOW*)dir_data->display;
@@ -1263,7 +1268,7 @@ static void ntfs_undelete_menu_ncurses(disk_t *disk_car, const partition_t *part
 	  waddstr(window, " ");
 	if((file_info->status&FILE_STATUS_MARKED)!=0 && has_colors())
 	  wbkgdset(window,' ' | COLOR_PAIR(2));
-	set_date((char *)&datestr, sizeof(datestr), file_info->td_mtime);
+	set_datestr((char *)&datestr, sizeof(datestr), file_info->td_mtime);
 	if(COLS <= 1+17+1+9+1)
 	  wprintw(window, "%s", file_info->name);
 	else
@@ -1476,15 +1481,17 @@ static void ntfs_undelete_menu_ncurses(disk_t *disk_car, const partition_t *part
 	    {
 	      if(dir_data->local_dir==NULL)
 	      {
-		char *res;
+		char dst_directory[4096];
+		dst_directory[0]='\0';
 		if(LINUX_S_ISDIR(file_info->st_mode)!=0)
-		  res=ask_location("Please select a destination where %s and any files below will be copied.",
-		      file_info->name, NULL);
+		  ask_location(dst_directory, sizeof(dst_directory), "Please select a destination where %s and any files below will be copied.",
+		      file_info->name);
 		else
-		  res=ask_location("Please select a destination where %s will be copied.",
-		      file_info->name, NULL);
-		dir_data->local_dir=res;
-		opts.dest=res;
+		  ask_location(dst_directory, sizeof(dst_directory), "Please select a destination where %s will be copied.",
+		      file_info->name);
+		if(dst_directory[0]!='\0')
+		  dir_data->local_dir=strdup(dst_directory);
+		opts.dest=dir_data->local_dir;
 	      }
 	      if(dir_data->local_dir!=NULL)
 	      {
@@ -1524,10 +1531,12 @@ static void ntfs_undelete_menu_ncurses(disk_t *disk_car, const partition_t *part
 	case 'C':
 	  if(dir_data->local_dir==NULL)
 	  {
-	    char *res;
-	    res=ask_location("Please select a destination where the marked files will be copied.", NULL, NULL);
-	    dir_data->local_dir=res;
-	    opts.dest=res;
+	    char dst_directory[4096];
+	    dst_directory[0]='\0';
+	    ask_location(dst_directory, sizeof(dst_directory), "Please select a destination where the marked files will be copied.", NULL);
+	    if(dst_directory[0]!='\0')
+	      dir_data->local_dir=strdup(dst_directory);
+	    opts.dest=dir_data->local_dir;
 	  }
 	  if(dir_data->local_dir!=NULL)
 	  {
@@ -1588,12 +1597,12 @@ static void ntfs_undelete_menu_ncurses(disk_t *disk_car, const partition_t *part
 }
 #endif
 
-static void ntfs_undelete_cli(dir_data_t *dir_data, file_info_t *dir_list)
+static void ntfs_undelete_cli(dir_data_t *dir_data, const file_info_t *dir_list)
 {
   unsigned int file_ok=0;
   unsigned int file_bad=0;
-  struct td_list_head *file_walker = NULL;
-  struct ntfs_dir_struct *ls=(struct ntfs_dir_struct *)dir_data->private_dir_data;
+  const struct td_list_head *file_walker = NULL;
+  const struct ntfs_dir_struct *ls=(const struct ntfs_dir_struct *)dir_data->private_dir_data;
   char *dst_path;
   dst_path=get_default_location();
   dir_data->local_dir=dst_path;
@@ -1612,7 +1621,7 @@ static void ntfs_undelete_cli(dir_data_t *dir_data, file_info_t *dir_list)
   opts.dest=NULL;
 }
 
-static void ntfs_undelete_menu(disk_t *disk_car, const partition_t *partition, dir_data_t *dir_data, file_info_t *dir_list, char**current_cmd)
+static void ntfs_undelete_menu(const disk_t *disk_car, const partition_t *partition, dir_data_t *dir_data, file_info_t *dir_list, char**current_cmd)
 {
   log_list_file(disk_car, partition, dir_data, dir_list);
   if(*current_cmd!=NULL)

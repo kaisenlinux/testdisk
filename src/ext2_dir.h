@@ -19,13 +19,23 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#ifndef _EXT2_DIR_H
+#define _EXT2_DIR_H
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/*@
+  @ requires \valid(disk_car);
+  @ requires valid_disk(disk_car);
+  @ requires \valid_read(partition);
+  @*/
 dir_partition_t dir_partition_ext2_init(disk_t *disk_car, const partition_t *partition, dir_data_t *dir_data, const int verbose);
+
+/*@ assigns \nothing; */
 const char*td_ext2fs_version(void);
 
 #ifdef __cplusplus
 } /* closing brace for extern "C" */
+#endif
 #endif

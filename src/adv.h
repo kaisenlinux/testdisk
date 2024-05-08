@@ -19,13 +19,27 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+
+#ifndef _ADV_H
+#define _ADV_H
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/*@
+  @ requires \valid(disk_car);
+  @ requires \valid(current_cmd);
+  @ requires valid_string(*current_cmd);
+  @*/
 void interface_adv(disk_t *disk_car, const int verbose,const int dump_ind, const unsigned int expert, char**current_cmd);
+
+/*@
+  @ requires \valid_read(partition);
+  @ assigns \nothing;
+  @*/
 int is_part_linux(const partition_t *partition);
 
 #ifdef __cplusplus
 } /* closing brace for extern "C" */
+#endif
 #endif

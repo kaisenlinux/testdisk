@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_ibd)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -32,6 +33,7 @@
 #include "common.h"
 #include "log.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_ibd(file_stat_t *file_stat);
 
 const file_hint_t file_hint_ibd= {
@@ -48,9 +50,12 @@ const file_hint_t file_hint_ibd= {
 #define FIL_PAGE_TYPE_FSP_HDR	8	/* File space header */
 #define DICT_TF_BITS            6       /* number of flag bits */
 #define DICT_TF_FORMAT_SHIFT    5       /* file format */
+#ifdef DISABLED_FOR_FRAMAC
+#define DICT_TF_FORMAT_MASK     0x20
+#else
 #define DICT_TF_FORMAT_MASK     \
-  ((~(~0 << (DICT_TF_BITS - DICT_TF_FORMAT_SHIFT))) << DICT_TF_FORMAT_SHIFT)
-
+  ((~(~0U << (DICT_TF_BITS - DICT_TF_FORMAT_SHIFT))) << DICT_TF_FORMAT_SHIFT)
+#endif
 #define DICT_TF_FORMAT_ZIP      1       /* InnoDB plugin for 5.1: compressed tables */
 
 struct innodb_fil_header
@@ -65,6 +70,14 @@ struct innodb_fil_header
   uint32_t arch_log_no_or_space_id;
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires buffer_size >= sizeof(struct innodb_fil_header);
+  @ requires buffer_size >  FSP_HEADER_OFFSET + FSP_SPACE_FLAGS;
+  @ requires separation: \separated(&file_hint_ibd, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_ibd(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct innodb_fil_header *hdr=(const struct innodb_fil_header *)buffer;
@@ -104,3 +117,4 @@ static void register_header_check_ibd(file_stat_t *file_stat)
 {
   register_header_check(0xc063, "infimum", 7, &header_check_ibd, file_stat);
 }
+#endif

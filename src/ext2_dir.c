@@ -23,6 +23,10 @@
 #include <config.h>
 #endif
 
+#if defined(DISABLED_FOR_FRAMAC)
+#undef HAVE_LIBEXT2FS
+#endif
+
 #include <stdio.h>
 #ifdef HAVE_STRING_H
 #include <string.h>
@@ -31,11 +35,13 @@
 #include <errno.h>
 #endif
 
+#if defined(HAVE_LIBEXT2FS)
 #ifdef HAVE_EXT2FS_EXT2_FS_H
 #include "ext2fs/ext2_fs.h"
 #endif
 #ifdef HAVE_EXT2FS_EXT2FS_H
 #include "ext2fs/ext2fs.h"
+#endif
 #endif
 
 #include "types.h"
@@ -67,9 +73,8 @@ static errcode_t my_flush(io_channel channel);
 static errcode_t my_read_blk64(io_channel channel, unsigned long long block, int count, void *buf);
 static errcode_t my_write_blk64(io_channel channel, unsigned long long block, int count, const void *buf);
 
-static io_channel alloc_io_channel(disk_t *disk_car,my_data_t *my_data);
 static void dir_partition_ext2_close(dir_data_t *dir_data);
-static int ext2_copy(disk_t *disk_car, const partition_t *partition, dir_data_t *dir_data, const file_info_t *file);
+static copy_file_t ext2_copy(disk_t *disk_car, const partition_t *partition, dir_data_t *dir_data, const file_info_t *file);
 
 static struct struct_io_manager my_struct_manager = {
         .magic = EXT2_ET_MAGIC_IO_MANAGER,
@@ -91,7 +96,6 @@ static struct struct_io_manager my_struct_manager = {
 	.write_blk64=&my_write_blk64,
 #endif
 };
-static int ext2_dir(disk_t *disk_car, const partition_t *partition, dir_data_t *dir_data, const unsigned long int cluster, file_info_t *dir_list);
 
 static io_channel shared_ioch=NULL;
 /*
@@ -105,7 +109,7 @@ static io_channel shared_ioch=NULL;
 /*
  * Allocate libext2fs structures associated with I/O manager
  */
-static io_channel alloc_io_channel(disk_t *disk_car,my_data_t *my_data)
+static io_channel alloc_io_channel(const disk_t *disk_car,my_data_t *my_data)
 {
   io_channel     ioch;
 #ifdef DEBUG_EXT2
@@ -285,9 +289,9 @@ static void dir_partition_ext2_close(dir_data_t *dir_data)
   free(ls);
 }
 
-static int ext2_copy(disk_t *disk_car, const partition_t *partition, dir_data_t *dir_data, const file_info_t *file)
+static copy_file_t ext2_copy(disk_t *disk_car, const partition_t *partition, dir_data_t *dir_data, const file_info_t *file)
 {
-  int error=0;
+  copy_file_t error=CP_OK;
   FILE *f_out;
   const struct ext2_dir_struct *ls = (const struct ext2_dir_struct *)dir_data->private_dir_data;
   char *new_file;
@@ -296,7 +300,7 @@ static int ext2_copy(disk_t *disk_car, const partition_t *partition, dir_data_t 
   {
     log_critical("Can't create file %s: %s\n", new_file, strerror(errno));
     free(new_file);
-    return -4;
+    return CP_CREATE_FAILED;
   }
   {
     errcode_t retval;
@@ -308,7 +312,7 @@ static int ext2_copy(disk_t *disk_car, const partition_t *partition, dir_data_t 
     {
       free(new_file);
       fclose(f_out);
-      return -1;
+      return CP_STAT_FAILED;
     }
 
     retval = ext2fs_file_open(ls->current_fs, file->st_ino, 0, &e2_file);
@@ -316,9 +320,9 @@ static int ext2_copy(disk_t *disk_car, const partition_t *partition, dir_data_t 
       log_error("Error while opening ext2 file %s\n", dir_data->current_directory);
       free(new_file);
       fclose(f_out);
-      return -2;
+      return CP_OPEN_FAILED;
     }
-    while (1)
+    while (error!=CP_NOSPACE)
     {
       int             nbytes; 
       unsigned int    got;
@@ -326,7 +330,7 @@ static int ext2_copy(disk_t *disk_car, const partition_t *partition, dir_data_t 
       if (retval)
       {
 	log_error("Error while reading ext2 file %s\n", dir_data->current_directory);
-	error = -3;
+	error = CP_READ_FAILED;
       }
       if (got == 0)
 	break;
@@ -334,14 +338,14 @@ static int ext2_copy(disk_t *disk_car, const partition_t *partition, dir_data_t 
       if ((unsigned) nbytes != got)
       {
 	log_error("Error while writing file %s\n", new_file);
-      error = -5;
+	error = CP_NOSPACE;
       }
     }
     retval = ext2fs_file_close(e2_file);
     if (retval)
     {
       log_error("Error while closing ext2 file\n");
-      error = -6;
+      error = CP_CLOSE_FAILED;
     }
     fclose(f_out);
     set_date(new_file, file->td_atime, file->td_mtime);

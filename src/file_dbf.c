@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_dbf)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -30,8 +31,8 @@
 #include "types.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_dbf(file_stat_t *file_stat);
-static int header_check_dbf(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
 
 const file_hint_t file_hint_dbf= {
   .extension="dbf",
@@ -42,13 +43,13 @@ const file_hint_t file_hint_dbf= {
   .register_header_check=&register_header_check_dbf
 };
 
-static const unsigned char dbf_header[1]= {0x3};
-
-static void register_header_check_dbf(file_stat_t *file_stat)
-{
-  register_header_check(0, dbf_header,sizeof(dbf_header), &header_check_dbf, file_stat);
-}
-
+/*@
+  @ requires buffer_size >= 32;
+  @ requires separation: \separated(&file_hint_dbf, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_dbf(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   /* 0x03 YY MM DD reserved=0 */
@@ -66,3 +67,10 @@ static int header_check_dbf(const unsigned char *buffer, const unsigned int buff
   }
   return 0;
 }
+
+static void register_header_check_dbf(file_stat_t *file_stat)
+{
+  static const unsigned char dbf_header[1]= {0x3};
+  register_header_check(0, dbf_header,sizeof(dbf_header), &header_check_dbf, file_stat);
+}
+#endif

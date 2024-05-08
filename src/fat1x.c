@@ -43,7 +43,7 @@
 #include "fat1x.h"
 
 #ifdef HAVE_NCURSES
-static void dump_fat1x_ncurses(disk_t *disk_car, partition_t *partition, const unsigned char *buffer_bs)
+static void dump_fat1x_ncurses(disk_t *disk_car, const partition_t *partition, const unsigned char *buffer_bs)
 {
   WINDOW *window=newwin(LINES, COLS, 0, 0);	/* full screen */
   keypad(window, TRUE); /* Need it to get arrow key */
@@ -62,7 +62,7 @@ static void dump_fat1x_ncurses(disk_t *disk_car, partition_t *partition, const u
 }
 #endif
 
-static void dump_fat1x(disk_t *disk_car, partition_t *partition, const unsigned char *buffer_bs, char **current_cmd)
+static void dump_fat1x(disk_t *disk_car, const partition_t *partition, const unsigned char *buffer_bs, char **current_cmd)
 {
   log_info("Boot sector\n");
   dump_log(buffer_bs, FAT1x_BOOT_SECTOR_SIZE);

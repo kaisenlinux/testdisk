@@ -22,6 +22,9 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
+#if defined(__CYGWIN__) || defined(__MINGW32__) || defined(DJGPP) || !defined(HAVE_GETEUID)
+#undef SUDO_BIN
+#endif
  
 #include <stdio.h>
 #ifdef HAVE_UNISTD_H
@@ -93,7 +96,7 @@ static int testdisk_disk_selection_ncurses(int verbose,int dump_ind, const list_
     wmove(stdscr,5,0);
     wprintw(stdscr,"comes with ABSOLUTELY NO WARRANTY.");
     wmove(stdscr,7,0);
-    wprintw(stdscr,"Select a media (use Arrow keys, then press Enter):");
+    wprintw(stdscr,"Select a media and choose 'Proceed' using arrow keys:");
     for(i=0,element_disk=list_disk;
 	element_disk!=NULL && i<offset+NBR_DISK_MAX;
 	i++, element_disk=element_disk->next)
@@ -111,11 +114,8 @@ static int testdisk_disk_selection_ncurses(int verbose,int dump_ind, const list_
       }
     }
     {
-      int line=INTER_NOTE_Y;
-      mvwaddstr(stdscr,line++,0,"Note: ");
-#if defined(__CYGWIN__) || defined(__MINGW32__) || defined(DJGPP)
-#else
-#ifdef HAVE_GETEUID
+      mvwaddstr(stdscr, INTER_NOTE_Y, 0, "Note: ");
+#if defined(HAVE_GETEUID) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(DJGPP)
       if(geteuid()!=0)
       {
         if(has_colors())
@@ -123,18 +123,26 @@ static int testdisk_disk_selection_ncurses(int verbose,int dump_ind, const list_
         waddstr(stdscr,"Some disks won't appear unless you are root user.");
         if(has_colors())
           wbkgdset(stdscr,' ' | COLOR_PAIR(0));
-        wmove(stdscr,line++,0);
 #ifdef SUDO_BIN
 	use_sudo=1;
 #endif
       }
+      else
 #endif
-#endif
-      waddstr(stdscr,"Disk capacity must be correctly detected for a successful recovery.");
-      wmove(stdscr,line++,0);
-      wprintw(stdscr,"If a disk listed above has an incorrect size, check HD jumper settings and BIOS");
-      wmove(stdscr,line,0);
-      wprintw(stdscr,"detection, and install the latest OS patches and disk drivers."); 
+      if(current_disk != NULL && current_disk->disk->serial_no != NULL)
+      {
+        if(has_colors())
+          wbkgdset(stdscr,' ' | A_BOLD | COLOR_PAIR(2));
+	wprintw(stdscr, "Serial number %s", current_disk->disk->serial_no);
+        if(has_colors())
+          wbkgdset(stdscr,' ' | COLOR_PAIR(0));
+      }
+      wmove(stdscr, INTER_NOTE_Y+1, 0);
+      waddstr(stdscr, "Disk capacity must be correctly detected for a successful recovery.");
+      wmove(stdscr, INTER_NOTE_Y+2, 0);
+      wprintw(stdscr, "If a disk listed above has an incorrect size, check HD jumper settings and BIOS");
+      wmove(stdscr, INTER_NOTE_Y+3, 0);
+      wprintw(stdscr, "detection, and install the latest OS patches and disk drivers.");
     }
 #ifdef SUDO_BIN
     if(use_sudo > 0)

@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_apa)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,8 +32,8 @@
 #include "common.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_apa(file_stat_t *file_stat);
-static int header_check_apa(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
 
 const file_hint_t file_hint_apa= {
   .extension="apa",
@@ -43,22 +44,26 @@ const file_hint_t file_hint_apa= {
   .register_header_check=&register_header_check_apa
 };
 
-static const unsigned char apa_magic[16]= {
-  'c', 'o', 'm', '.', 'a', 'p', 'a', '.',
-  'D', 'o', 'c', 'u', 'm', 'e', 'n', 't'};
+/*@
+  @ requires buffer_size >= 11+13;
+  @ requires separation: \separated(&file_hint_apa, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
+static int header_check_apa(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
+{
+  reset_file_recovery(file_recovery_new);
+  file_recovery_new->extension=file_hint_apa.extension;
+  return 1;
+}
 
 static void register_header_check_apa(file_stat_t *file_stat)
 {
+  static const unsigned char apa_magic[16]= {
+    'c', 'o', 'm', '.', 'a', 'p', 'a', '.',
+    'D', 'o', 'c', 'u', 'm', 'e', 'n', 't'};
   register_header_check(8, apa_magic, sizeof(apa_magic), &header_check_apa, file_stat);
 }
 
-static int header_check_apa(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
-{
-  if(memcmp(&buffer[8], apa_magic, sizeof(apa_magic))==0)
-  {
-    reset_file_recovery(file_recovery_new);
-    file_recovery_new->extension=file_hint_apa.extension;
-    return 1;
-  }
-  return 0;
-}
+#endif

@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_ari)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,6 +32,7 @@
 #include "filegen.h"
 #include "common.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_ari(file_stat_t *file_stat);
 
 const file_hint_t file_hint_ari= {
@@ -54,6 +56,13 @@ struct arri_header
   uint32_t cam_hwr_rev;
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires buffer_size > sizeof(struct arri_header);
+  @ requires separation: \separated(&file_hint_ari, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_ari(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct arri_header *hdr=(const struct arri_header *)buffer;
@@ -74,3 +83,4 @@ static void register_header_check_ari(file_stat_t *file_stat)
     0x00, 0x10, 0x00, 0x00};
   register_header_check(0, ari_header, sizeof(ari_header), &header_check_ari, file_stat);
 }
+#endif

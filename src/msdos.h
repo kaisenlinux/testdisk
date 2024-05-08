@@ -19,6 +19,8 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#ifndef _MSDOS_H
+#define _MSDOS_H
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -32,8 +34,14 @@ struct info_disk_struct
 };
 
 disk_t *hd_identify(const int verbose, const unsigned int disk, const int testdisk_mode);
+
+/*@
+  @ requires \valid(disk_car);
+  @ requires valid_disk(disk_car);
+  @*/
 const char *disk_description(disk_t *disk_car);
 
 #ifdef __cplusplus
 } /* closing brace for extern "C" */
+#endif
 #endif

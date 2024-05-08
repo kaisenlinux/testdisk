@@ -23,6 +23,10 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
+
+#if defined(DISABLED_FOR_FRAMAC)
+#undef HAVE_NCURSES
+#endif
  
 #ifdef HAVE_NCURSES
 #include <stdio.h>
@@ -32,7 +36,6 @@
 #include "intrfn.h"
 #include "fat.h"
 #include "fatn.h"
-#include "fat_common.h"
 
 int dump_fat_info_ncurses(const struct fat_boot_sector*fh1, const upart_type_t upart_type, const unsigned int sector_size)
 {

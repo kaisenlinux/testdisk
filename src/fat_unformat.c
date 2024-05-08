@@ -55,8 +55,11 @@
 #include "fat_common.h"
 #include <assert.h>
 
+#ifndef DISABLED_FOR_FRAMAC
+extern int need_to_stop;
+
 #define READ_SIZE 4*1024*1024
-static int pfind_sectors_per_cluster(disk_t *disk, partition_t *partition, const int verbose, unsigned int *sectors_per_cluster, uint64_t *offset_org, alloc_data_t *list_search_space)
+static int pfind_sectors_per_cluster(disk_t *disk, const partition_t *partition, const int verbose, unsigned int *sectors_per_cluster, uint64_t *offset_org, alloc_data_t *list_search_space)
 {
   uint64_t offset=0;
   uint64_t next_offset=0;
@@ -149,7 +152,7 @@ static void strip_fn(char *fn)
   fn[i]='\0';
 }
 
-static int fat_copy_file(disk_t *disk, const partition_t *partition, const unsigned int cluster_size, const uint64_t start_data, const char *recup_dir, const unsigned int dir_num, const unsigned int inode_num, const file_info_t *file)
+static copy_file_t fat_copy_file(disk_t *disk, const partition_t *partition, const unsigned int cluster_size, const uint64_t start_data, const char *recup_dir, const unsigned int dir_num, const unsigned int inode_num, const file_info_t *file)
 {
   char *new_file;	
   FILE *f_out;
@@ -185,7 +188,7 @@ static int fat_copy_file(disk_t *disk, const partition_t *partition, const unsig
     log_critical("Can't create file %s: \n",new_file);
     free(new_file);
     free(buffer_file);
-    return -1;
+    return CP_CREATE_FAILED;
   }
   while(cluster>=2 && cluster<=no_of_cluster+2 && file_size>0)
   {
@@ -204,7 +207,7 @@ static int fat_copy_file(disk_t *disk, const partition_t *partition, const unsig
       set_date(new_file, file->td_atime, file->td_mtime);
       free(new_file);
       free(buffer_file);
-      return -1;
+      return CP_NOSPACE;
     }
     file_size -= toread;
     cluster++;
@@ -213,7 +216,7 @@ static int fat_copy_file(disk_t *disk, const partition_t *partition, const unsig
   set_date(new_file, file->td_atime, file->td_mtime);
   free(new_file);
   free(buffer_file);
-  return 0;
+  return CP_OK;
 }
 
 static pstatus_t fat_unformat_aux(struct ph_param *params, const struct ph_options *options, const uint64_t start_data, alloc_data_t *list_search_space)
@@ -386,6 +389,13 @@ static pstatus_t fat_unformat_aux(struct ph_param *params, const struct ph_optio
 	}
       }
 #endif
+      if(need_to_stop!=0)
+      {
+	log_info("PhotoRec has been stopped\n");
+	params->offset=offset;
+	offset = offset_end;
+	ind_stop=PSTATUS_STOP;
+      }
     }
   }
   free(buffer_start);
@@ -431,3 +441,4 @@ pstatus_t fat_unformat(struct ph_param *params, const struct ph_options *options
   /* start_data is relative to the disk */
   return fat_unformat_aux(params, options, start_data, list_search_space);
 }
+#endif

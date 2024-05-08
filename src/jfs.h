@@ -19,6 +19,8 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#ifndef _JFS_H
+#define _JFS_H
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -26,9 +28,25 @@ extern "C" {
 #define JFS_SUPERBLOCK_SIZE 512
 
 #define L2BPERDMAP 13      /* l2 num of blks per dmap */
+/*@
+  @ requires \valid(disk_car);
+  @ requires valid_disk(disk_car);
+  @ requires \valid(partition);
+  @ requires separation: \separated(disk_car, partition);
+  @ decreases 0;
+  @*/
 int check_JFS(disk_t *disk_car, partition_t *partition);
-int recover_JFS(disk_t *disk_car, const struct jfs_superblock *sb,partition_t *partition,const int verbose, const int dump_ind);
+
+/*@
+  @ requires \valid_read(disk_car);
+  @ requires valid_disk(disk_car);
+  @ requires \valid_read(sb);
+  @ requires \valid(partition);
+  @ requires separation: \separated(disk_car, sb, partition);
+  @*/
+int recover_JFS(const disk_t *disk_car, const struct jfs_superblock *sb, partition_t *partition, const int verbose, const int dump_ind);
 
 #ifdef __cplusplus
 } /* closing brace for extern "C" */
+#endif
 #endif

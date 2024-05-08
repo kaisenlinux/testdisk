@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_pdb)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -30,6 +31,7 @@
 #include "types.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_pdb(file_stat_t *file_stat);
 
 const file_hint_t file_hint_pdb= {
@@ -41,9 +43,22 @@ const file_hint_t file_hint_pdb= {
   .register_header_check=&register_header_check_pdb
 };
 
+/*@
+  @ requires file_recovery->data_check==&data_check_pdb;
+  @ requires valid_data_check_param(buffer, buffer_size, file_recovery);
+  @ terminates \true;
+  @ ensures  valid_data_check_result(\result, file_recovery);
+  @ assigns  file_recovery->calculated_file_size;
+  @*/
 static data_check_t data_check_pdb(const unsigned char *buffer, const unsigned int buffer_size, file_recovery_t *file_recovery)
 {
   unsigned int i;
+  /*@ assert file_recovery->calculated_file_size <= PHOTOREC_MAX_FILE_SIZE; */
+  /*@ assert file_recovery->file_size <= PHOTOREC_MAX_FILE_SIZE; */
+  /*@
+    @ loop assigns i;
+    @ loop variant buffer_size - i;
+    @*/
   for(i=buffer_size/2; i<buffer_size; i++)
     if(buffer[i]==0)
     {
@@ -54,12 +69,22 @@ static data_check_t data_check_pdb(const unsigned char *buffer, const unsigned i
   return DC_CONTINUE;
 }
 
+/*@
+  @ requires file_recovery->file_check == &file_check_pdb;
+  @ requires valid_file_check_param(file_recovery);
+  @ ensures  valid_file_check_result(file_recovery);
+  @ assigns  *file_recovery->handle, errno, file_recovery->file_size;
+  @ assigns  Frama_C_entropy_source;
+  @*/
 static void file_check_pdb(file_recovery_t *file_recovery)
 {
-  unsigned char buffer[512];
+  char buffer[512];
   if(my_fseek(file_recovery->handle, 0, SEEK_SET) < 0 ||
       fread(&buffer, 1, sizeof(buffer), file_recovery->handle) < 82)
     return ;
+#if defined(__FRAMAC__)
+  Frama_C_make_unknown(buffer, sizeof(buffer));
+#endif
   if(buffer[80]=='\r' && buffer[81]=='\n')
     file_recovery->file_size=file_recovery->calculated_file_size/82*82;
   else if(buffer[80]=='\n')
@@ -68,6 +93,14 @@ static void file_check_pdb(file_recovery_t *file_recovery)
     file_recovery->file_size=0;
 }
 
+/*@
+  @ requires buffer_size >= 70;
+  @ requires separation: \separated(&file_hint_pdb, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ terminates \true;
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_pdb(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   /* Check date */
@@ -96,3 +129,4 @@ static void register_header_check_pdb(file_stat_t *file_stat)
 {
   register_header_check(0, "HEADER    ", 10, &header_check_pdb, file_stat);
 }
+#endif

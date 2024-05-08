@@ -19,14 +19,42 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#ifndef _PARTI386_H
+#define _PARTI386_H
+#if !defined(SINGLE_PARTITION_TYPE) || defined(SINGLE_PARTITION_I386)
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/*@
+  @ requires \valid_read(disk_car);
+  @ requires \valid_read(partition);
+  @ assigns \nothing;
+  @*/
 int parti386_can_be_ext(const disk_t *disk_car, const partition_t *partition);
+
+/*@
+  @ requires valid_disk(disk_car);
+  @ requires \valid_read(disk_car);
+  @ requires valid_list_part(list_part);
+  @ requires \valid(current_cmd);
+  @ requires separation: \separated(disk_car, list_part, current_cmd, *current_cmd);
+  @ requires valid_read_string(*current_cmd);
+  @*/
+// ensures  valid_list_part(\result);
+// ensures  valid_read_string(*current_cmd);
 list_part_t *add_partition_i386_cli(disk_t *disk_car, list_part_t *list_part, char **current_cmd);
+
+/*@
+  @ requires \valid(disk);
+  @ requires \valid_read(buffer + (0 .. 512-1));
+  @ requires \valid(partition);
+  @ requires separation: \separated(disk, buffer + (0 .. 512-1), partition);
+  @*/
 int recover_i386_logical(disk_t *disk, const unsigned char *buffer, partition_t *partition);
 
 #ifdef __cplusplus
 } /* closing brace for extern "C" */
+#endif
+#endif
 #endif

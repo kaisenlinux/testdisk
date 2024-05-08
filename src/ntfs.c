@@ -43,10 +43,30 @@
 #include "fnctdsk.h"
 #include "lang.h"
 #include "log.h"
-/* #include "guid_cmp.h" */
-extern const arch_fnct_t arch_i386;
 
+#if !defined(SINGLE_PARTITION_TYPE) || defined(SINGLE_PARTITION_I386)
+extern const arch_fnct_t arch_i386;
+#endif
+
+/*@
+  @ requires \valid(disk_car);
+  @ requires valid_disk(disk_car);
+  @ requires \valid_read(ntfs_header);
+  @ requires \valid(partition);
+  @ requires valid_partition(partition);
+  @ requires \separated(disk_car, ntfs_header, partition);
+  @*/
 static void set_NTFS_info(disk_t *disk_car, const struct ntfs_boot_sector*ntfs_header, partition_t *partition);
+
+/*@
+  @ requires \valid(disk_car);
+  @ requires valid_disk(disk_car);
+  @ requires \valid(partition);
+  @ requires valid_partition(partition);
+  @ requires \valid_read(ntfs_header);
+  @ requires \separated(disk_car, partition, ntfs_header);
+  @ decreases 0;
+  @*/
 static void ntfs_get_volume_name(disk_t *disk_car, partition_t *partition, const struct ntfs_boot_sector*ntfs_header);
 
 unsigned int ntfs_sector_size(const struct ntfs_boot_sector *ntfs_header)
@@ -184,6 +204,10 @@ int test_NTFS(const disk_t *disk_car, const struct ntfs_boot_sector*ntfs_header,
   return 0;
 }
 
+/*@
+  @ requires \valid_read(record);
+  @ assigns  \nothing;
+  @*/
 static const ntfs_attribheader *ntfs_getattributeheaders(const ntfs_recordheader* record)
 {
   const char* location = (const char*)record;
@@ -195,13 +219,18 @@ static const ntfs_attribheader *ntfs_getattributeheaders(const ntfs_recordheader
   return (const ntfs_attribheader *)location;
 }
 
+/*@
+  @ requires \valid_read(attrib);
+  @ assigns  \nothing;
+  @*/
 static const ntfs_attribheader* ntfs_searchattribute(const ntfs_attribheader* attrib, uint32_t attrType, const char* end, int skip)
 {
   if(attrib==NULL)
     return NULL;
   /* Now we should be at attributes */
+  /*@ loop assigns attrib; */
   while((const char *)attrib + sizeof(ntfs_attribheader) < end &&
-      le32(attrib->type)!= -1)
+      le32(attrib->type)!= 0xffffffff)
   {
     const unsigned int attr_len=le32(attrib->cbAttribute);
     if(attr_len%8!=0 || attr_len<0x18 || attr_len>0x10000000 ||
@@ -305,6 +334,7 @@ static void ntfs_get_volume_name(disk_t *disk_car, partition_t *partition, const
   unsigned char *buffer;
   uint64_t mft_pos;
   unsigned int mft_record_size;
+  partition->fsname[0]='\0';
   if(ntfs_header->clusters_per_mft_record>0)
     mft_record_size=ntfs_header->clusters_per_mft_record * ntfs_header->sectors_per_cluster * ntfs_sector_size(ntfs_header);
   else
@@ -334,13 +364,19 @@ static void ntfs_get_volume_name(disk_t *disk_car, partition_t *partition, const
     const ntfs_attribresident *attrib=(const ntfs_attribresident *)ntfs_findattribute((const ntfs_recordheader*)buffer, 0x60, (char*)buffer+mft_record_size);
     if(attrib && attrib->header.bNonResident==0)	/* attribute is resident */
     {
-      char *dest=partition->fsname;
+      char *dest;
       const char *name_it;
       unsigned int volume_name_length=le32(attrib->cbAttribData);
       volume_name_length/=2;	/* Unicode */
       if(volume_name_length>sizeof(partition->fsname)-1)
 	volume_name_length=sizeof(partition->fsname)-1;
-      for(name_it=ntfs_getattributedata(attrib, (char*)(buffer+mft_record_size));
+      name_it=ntfs_getattributedata(attrib, (char*)(buffer+mft_record_size));
+      if(name_it==NULL)
+      {
+	free(buffer);
+	return;
+      }
+      for(dest=partition->fsname;
 	  volume_name_length>0 && *name_it!='\0' && name_it[1]=='\0';
 	  name_it+=2,volume_name_length--)
 	*dest++=*name_it;
@@ -353,6 +389,7 @@ static void ntfs_get_volume_name(disk_t *disk_car, partition_t *partition, const
 
 int is_part_ntfs(const partition_t *partition)
 {
+#if !defined(SINGLE_PARTITION_TYPE) || defined(SINGLE_PARTITION_I386)
   if(partition->arch==&arch_i386)
   {
     switch(partition->part_type_i386)
@@ -364,13 +401,7 @@ int is_part_ntfs(const partition_t *partition)
         break;
     }
   }
-  /*
-  else if(partition->arch==&arch_gpt)
-  {
-    if(guid_cmp(partition->part_type_gpt,GPT_ENT_TYPE_MS_BASIC_DATA)==0)
-      return 1;
-  }
-  */
+#endif
   return 0;
 }
 

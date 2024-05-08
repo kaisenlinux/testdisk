@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_caf)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -35,6 +36,7 @@
 #include "log.h"
 #endif
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_caf(file_stat_t *file_stat);
 
 const file_hint_t file_hint_caf= {
@@ -46,22 +48,37 @@ const file_hint_t file_hint_caf= {
   .register_header_check=&register_header_check_caf
 };
 
-/* http://developer.apple.com/library/mac/documentation/MusicAudio/Reference/CAFSpec/CAF_spec/CAF_spec.html */
+/* https://developer.apple.com/library/archive/documentation/MusicAudio/Reference/CAFSpec/CAF_spec/CAF_spec.html */
 
 struct chunk_struct
 {
   uint32_t type;
-  int64_t  size;
+  /* The correct type is int64_t but */
+  uint64_t  size;
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires file_recovery->data_check==&data_check_caf;
+  @ requires valid_data_check_param(buffer, buffer_size, file_recovery);
+  @ terminates \true;
+  @ ensures  valid_data_check_result(\result, file_recovery);
+  @ assigns file_recovery->calculated_file_size,file_recovery->data_check,file_recovery->file_check;
+  @*/
 static data_check_t data_check_caf(const unsigned char *buffer, const unsigned int buffer_size, file_recovery_t *file_recovery)
 {
+  /*@ assert file_recovery->calculated_file_size <= PHOTOREC_MAX_FILE_SIZE; */
+  /*@ assert file_recovery->file_size <= PHOTOREC_MAX_FILE_SIZE; */
+  /*@
+    @ loop assigns file_recovery->calculated_file_size;
+    @ loop variant file_recovery->file_size + buffer_size/2 - (file_recovery->calculated_file_size + 12);
+    @*/
   while(file_recovery->calculated_file_size + buffer_size/2  >= file_recovery->file_size &&
       file_recovery->calculated_file_size + 12 < file_recovery->file_size + buffer_size/2)
   {
-    const unsigned int i=file_recovery->calculated_file_size - file_recovery->file_size + buffer_size/2;
+    const unsigned int i=file_recovery->calculated_file_size + buffer_size/2 - file_recovery->file_size;
+    /*@ assert 0 <= i < buffer_size - 12; */
     const struct chunk_struct *chunk=(const struct chunk_struct*)&buffer[i];
-    const int64_t chunk_size=be64(chunk->size);
+    const uint64_t chunk_size=be64(chunk->size);
 #ifdef DEBUG_CAF
     log_trace("file_caf.c: %s chunk %c%c%c%c (0x%02x%02x%02x%02x) size %llu, calculated_file_size %llu (0x%llx)\n",
 	file_recovery->filename,
@@ -73,19 +90,19 @@ static data_check_t data_check_caf(const unsigned char *buffer, const unsigned i
 #endif
     if(buffer[i]==0)
     {
-      file_recovery->calculated_file_size--;
+      /* Always true */
+      if(file_recovery->calculated_file_size > 0)
+	file_recovery->calculated_file_size--;
       return DC_STOP;
     }
-    if(chunk_size >= 0)
-    {
-      file_recovery->calculated_file_size+=(uint64_t)12+chunk_size;
-    }
-    else
+    /* The correct type is int64_t, 0x7ffffffffffffff >= PHOTOREC_MAX_FILE_SIZE  */
+    if(chunk_size>PHOTOREC_MAX_FILE_SIZE)
     {
       file_recovery->data_check=NULL;
       file_recovery->file_check=NULL;
       return DC_STOP;
     }
+    file_recovery->calculated_file_size+=(uint64_t)12+chunk_size;
   }
 #ifdef DEBUG_CAF
   log_trace("file_caf.c: new calculated_file_size %llu\n",
@@ -94,11 +111,19 @@ static data_check_t data_check_caf(const unsigned char *buffer, const unsigned i
   return DC_CONTINUE;
 }
 
+/*@
+  @ requires separation: \separated(&file_hint_caf, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ terminates \true;
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ ensures  \result!=0 && file_recovery_new->data_check==&data_check_caf ==> file_recovery_new->calculated_file_size == 8;
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_caf(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct chunk_struct *chunk=(const struct chunk_struct*)&buffer[8];
-  const int64_t chunk_size=be64(chunk->size);
-  if(chunk_size < 0)
+  const uint64_t chunk_size=be64(chunk->size);
+  if(chunk_size >= PHOTOREC_MAX_FILE_SIZE)
     return 0;
   reset_file_recovery(file_recovery_new);
   file_recovery_new->extension=file_hint_caf.extension;
@@ -109,6 +134,7 @@ static int header_check_caf(const unsigned char *buffer, const unsigned int buff
     file_recovery_new->file_check=&file_check_size;
     file_recovery_new->calculated_file_size=8;
   }
+  /*@ assert file_recovery_new->data_check==&data_check_caf ==> file_recovery_new->calculated_file_size == 8; */
   return 1;
 }
 
@@ -120,3 +146,4 @@ static void register_header_check_caf(file_stat_t *file_stat)
   };
   register_header_check(0, caf_header, sizeof(caf_header), &header_check_caf, file_stat);
 }
+#endif

@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_e01)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,7 +32,10 @@
 #include "filegen.h"
 #include "common.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_e01(file_stat_t *file_stat);
+
+static char ext[10];
 
 const file_hint_t file_hint_e01= {
   .extension="e01",
@@ -65,6 +69,13 @@ struct ewf_file_header
         uint16_t fields_end;
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires file_recovery->file_check == &file_check_e01;
+  @ requires valid_file_check_param(file_recovery);
+  @ ensures  valid_file_check_result(file_recovery);
+  @ assigns *file_recovery->handle, errno, file_recovery->file_size;
+  @ assigns Frama_C_entropy_source;
+  @*/
 static void file_check_e01(file_recovery_t *file_recovery)
 {
   const uint64_t tmp=file_recovery->file_size;
@@ -83,15 +94,38 @@ static void file_check_e01(file_recovery_t *file_recovery)
   file_search_footer(file_recovery, sig_done, sizeof(sig_done), 60);
 }
 
+/*@
+  @ requires buffer_size >= sizeof(struct ewf_file_header);
+  @ requires separation: \separated(&file_hint_e01, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new, *(ext + (0 .. sizeof(ext)-1));
+  @*/
 static int header_check_e01(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct ewf_file_header *ewf=(const struct ewf_file_header *)buffer;
-  static char ext[4];
+  uint16_t fields_segment=le16(ewf->fields_segment);
   reset_file_recovery(file_recovery_new);
-  ext[0]='E'+le16(ewf->fields_segment)/100;
-  ext[1]='0'+(le16(ewf->fields_segment)%100)/10;
-  ext[2]='0'+(le16(ewf->fields_segment)%10);
-  ext[3]='\0';
+  if(fields_segment > ('Z'-'E') * 100 + 99)
+  {
+    ext[0]='E';
+    ext[1]='0';
+    ext[2]='1';
+    ext[3]='_';
+    ext[4]='0'+(fields_segment/10000)%10;
+    ext[5]='0'+(fields_segment/1000)%10;
+    ext[6]='0'+(fields_segment/100)%10;
+    ext[7]='0'+(fields_segment/10)%10;
+    ext[8]='0'+fields_segment%10;
+    ext[9]='\0';
+  }
+  else
+  {
+    ext[0]='E'+fields_segment/100;
+    ext[1]='0'+(fields_segment/10)%10;
+    ext[2]='0'+(fields_segment%10);
+    ext[3]='\0';
+  }
   file_recovery_new->extension=(const char*)&ext;
   file_recovery_new->file_check=&file_check_e01;
   return 1;
@@ -105,3 +139,4 @@ static void register_header_check_e01(file_stat_t *file_stat)
   };
   register_header_check(0, e01_header, sizeof(e01_header), &header_check_e01, file_stat);
 }
+#endif

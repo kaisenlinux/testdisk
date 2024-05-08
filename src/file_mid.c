@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_mid)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -32,6 +33,7 @@
 #include "common.h"
 #include "log.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_mid(file_stat_t *file_stat);
 
 const file_hint_t file_hint_mid= {
@@ -54,6 +56,18 @@ struct midi_header
   int16_t time_division;
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires file_recovery->file_check == &file_check_midi;
+  @ requires separation: \separated(file_recovery, file_recovery->handle, &errno, &Frama_C_entropy_source);
+  @ requires valid_file_check_param(file_recovery);
+  @ ensures  valid_file_check_result(file_recovery);
+  @ assigns  errno;
+  @ assigns  file_recovery->calculated_file_size;
+  @ assigns  file_recovery->file_size;
+  @ assigns  *file_recovery->handle;
+  @ assigns  file_recovery->time;
+  @ assigns  Frama_C_entropy_source;
+  @*/
 static void file_check_midi(file_recovery_t *file_recovery)
 {
   const uint64_t fs_org=file_recovery->file_size;
@@ -66,6 +80,11 @@ static void file_check_midi(file_recovery_t *file_recovery)
       fread(&hdr, sizeof(hdr), 1, file_recovery->handle) != 1)
     return ;
   tracks=be16(hdr.tracks);
+  /*@
+    @ loop assigns i, *file_recovery->handle, fs;
+    @ loop assigns errno, Frama_C_entropy_source;
+    @ loop variant tracks - i;
+    @*/
   for(i=0; i<tracks; i++)
   {
     struct midi_header track;
@@ -83,12 +102,28 @@ static void file_check_midi(file_recovery_t *file_recovery)
   file_recovery->file_size=fs;
 }
 
+/*@
+  @ requires buffer_size >= 2 && (buffer_size&1)==0;
+  @ requires \valid(file_recovery);
+  @ requires \valid_read(buffer + ( 0 .. buffer_size-1));
+  @ requires file_recovery->data_check == &data_check_midi;
+  @ requires separation: \separated(buffer+(..), file_recovery);
+  @ ensures \result == DC_CONTINUE || \result == DC_STOP;
+  @ assigns file_recovery->calculated_file_size;
+  @*/
 static data_check_t data_check_midi(const unsigned char *buffer, const unsigned int buffer_size, file_recovery_t *file_recovery)
 {
+  /*@ assert file_recovery->calculated_file_size <= PHOTOREC_MAX_FILE_SIZE; */
+  /*@ assert file_recovery->file_size <= PHOTOREC_MAX_FILE_SIZE; */
+  /*@
+    @ loop assigns file_recovery->calculated_file_size;
+    @ loop variant file_recovery->file_size + buffer_size/2 - (file_recovery->calculated_file_size + 8);
+    @*/
   while(file_recovery->calculated_file_size + buffer_size/2  >= file_recovery->file_size &&
       file_recovery->calculated_file_size + 8 < file_recovery->file_size + buffer_size/2)
   {
-    const unsigned int i=file_recovery->calculated_file_size - file_recovery->file_size + buffer_size/2;
+    const unsigned int i=file_recovery->calculated_file_size + buffer_size/2 - file_recovery->file_size;
+    /*@ assert 0 <= i < buffer_size - 8; */
     const struct midi_header *hdr=(const struct midi_header*)&buffer[i];
     const uint64_t len=be32(hdr->len);
 #ifdef DEBUG_MIDI
@@ -101,6 +136,14 @@ static data_check_t data_check_midi(const unsigned char *buffer, const unsigned 
   return DC_CONTINUE;
 }
 
+/*@
+  @ requires buffer_size >= sizeof(struct midi_header);
+  @ requires separation: \separated(&file_hint_mid, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ terminates \true;
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_mid(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct midi_header *hdr=(const struct midi_header *)buffer;
@@ -121,3 +164,4 @@ static void register_header_check_mid(file_stat_t *file_stat)
   static const unsigned char mid_header[8]  = { 'M','T','h','d', 0, 0, 0, 0x6};
   register_header_check(0, mid_header,sizeof(mid_header), &header_check_mid, file_stat);
 }
+#endif

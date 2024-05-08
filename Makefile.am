@@ -20,12 +20,21 @@ EXTRA_DIST = AUTHORS COPYING ChangeLog INFO INSTALL NEWS README.md README_dev_ph
 	src/gnome/help-about.png \
 	src/gnome/image-x-generic.png \
 	src/lang/qphotorec.ca.ts \
+	src/lang/qphotorec.cs.ts \
+	src/lang/qphotorec.el.ts \
 	src/lang/qphotorec.es.ts \
+	src/lang/qphotorec.fi.ts \
 	src/lang/qphotorec.fr.ts \
 	src/lang/qphotorec.it.ts \
+	src/lang/qphotorec.ja.ts \
+	src/lang/qphotorec.pl.ts \
 	src/lang/qphotorec.pt.ts \
 	src/lang/qphotorec.ru.ts \
+	src/lang/qphotorec.sv_SE.ts \
+	src/lang/qphotorec.tr.ts \
+	src/lang/qphotorec.zh_CN.ts \
 	src/lang/qphotorec.zh_TW.ts \
+	win/qt.conf \
 	win/readme.txt win/photorec_win.exe.manifest win/qphotorec_win.exe.manifest \
 	win/testdisk_win.exe.manifest \
 	Android.mk jni/Android.mk \
@@ -58,5 +67,14 @@ extras:
 
 extrasstatic:
 	$(MAKE) LDFLAGS="$(LDFLAGS) -static" LIBS="$(PTHREAD_LIBS) $(LIBS)" CFLAGS="$(PTHREAD_CFLAGS) $(CFLAGS)" CXXFLAGS="$(PTHREAD_CFLAGS) $(CXXFLAGS)" extras
+
+session_%.framac:
+	(cd src && $(MAKE) $@) || exit 1;
+
+frama-c-%:
+	(cd src && $(MAKE) $@) || exit 1;
+
+cppcheck:
+	cppcheck --quiet --enable=all -DHAVE_CONFIG_H -I$(builddir) -I/usr/include $(srcdir)/src
 
 DISTCLEANFILES = *~ core

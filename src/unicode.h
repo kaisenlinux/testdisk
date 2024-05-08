@@ -19,13 +19,31 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#ifndef _UNICODE_H
+#define _UNICODE_H
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-int UCSle2str(char *to, const uint16_t *from, const unsigned int len);
-int str2UCSle(uint16_t *to, const char *from, const unsigned int len);
+/*@
+  @ requires \valid(to + ( 0 .. len-1));
+  @ requires \valid_read(from + ( 0 .. len-1));
+  @ requires \separated(to + (..), from + (..));
+  @ terminates \true;
+  @ assigns to[0 .. len-1];
+  @*/
+unsigned int UCSle2str(char *to, const uint16_t *from, const unsigned int len);
+
+/*@
+  @ requires \valid(to + ( 0 .. len-1));
+  @ requires \valid_read(from + ( 0 .. len-1));
+  @ requires \separated(to + (..), from + (..));
+  @ terminates \true;
+  @ assigns to[0 .. len-1];
+  @*/
+unsigned int str2UCSle(uint16_t *to, const char *from, const unsigned int len);
 
 #ifdef __cplusplus
 } /* closing brace for extern "C" */
+#endif
 #endif

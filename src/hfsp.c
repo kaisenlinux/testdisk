@@ -52,7 +52,6 @@ static void set_HFSP_info(partition_t *partition, const struct hfsp_vh *vh)
   }
 }
 
-
 int check_HFSP(disk_t *disk_car,partition_t *partition,const int verbose)
 {
   unsigned char *buffer=(unsigned char*)MALLOC(HFSP_BOOT_SECTOR_SIZE);
@@ -77,7 +76,7 @@ int check_HFSP(disk_t *disk_car,partition_t *partition,const int verbose)
   return 0;
 }
 
-int recover_HFSP(disk_t *disk_car, const struct hfsp_vh *vh,partition_t *partition,const int verbose, const int dump_ind, const int backup)
+int recover_HFSP(disk_t *disk_car, const struct hfsp_vh *vh, partition_t *partition, const int verbose, const int dump_ind, const int backup)
 {
   uint64_t part_size;
   if(test_HFSP(disk_car,vh,partition,verbose,dump_ind)!=0)
@@ -116,7 +115,7 @@ int recover_HFSP(disk_t *disk_car, const struct hfsp_vh *vh,partition_t *partiti
   return 0;
 }
 
-int test_HFSP(disk_t *disk_car, const struct hfsp_vh *vh, const partition_t *partition, const int verbose, const int dump_ind)
+int test_HFSP(const disk_t *disk_car, const struct hfsp_vh *vh, const partition_t *partition, const int verbose, const int dump_ind)
 {
   if (be32(vh->free_blocks) > be32(vh->total_blocks))
     return 1;

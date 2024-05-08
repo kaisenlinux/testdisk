@@ -19,6 +19,7 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_icc)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -29,6 +30,7 @@
 #include "types.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_icc(file_stat_t *file_stat);
 
 const file_hint_t file_hint_icc= {
@@ -40,6 +42,14 @@ const file_hint_t file_hint_icc= {
   .register_header_check=&register_header_check_icc
 };
 
+/*@
+  @ requires buffer_size >= 128;
+  @ requires separation: \separated(&file_hint_icc, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ terminates \true;
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_icc(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const uint64_t file_size=(((uint64_t)buffer[0])<<24) +
@@ -47,6 +57,10 @@ static int header_check_icc(const unsigned char *buffer, const unsigned int buff
   unsigned int i;
   if(file_size<128 || buffer[10]!=0 || buffer[11]!=0)
     return 0;
+  /*@
+    @ loop assigns i;
+    @ loop variant 128 - i;
+    @*/
   for(i=100; i<128; i++)
     if(buffer[i]!=0)
       return 0;
@@ -65,3 +79,4 @@ static void register_header_check_icc(file_stat_t *file_stat)
   static const unsigned char icc_header[4]= { 'a', 'c', 's', 'p' };
   register_header_check(36, icc_header,sizeof(icc_header), &header_check_icc, file_stat);
 }
+#endif

@@ -19,9 +19,10 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#ifndef _LANG_H
+#define _LANG_H
 
 #define msg_DUMP_HEXA     "Dump Hexa\n"
-#define msg_READ_ERROR_AT "Read error at %u/%u/%u (lba=%lu)\n"
 #define c_YES           'Y'
 #define c_NO            'N'
 #define msg_TBL_NMARK     "\nPartition sector doesn't have the endmark 0xAA55\n"
@@ -57,3 +58,4 @@
 #define msg_MBR_ORDER_GOOD        "Partitions order: Ok "
 #define msg_MBR_ORDER_BAD "Partitions order: Bad"
 #define msg_NO_EXT_PART   "No extended partition\n"
+#endif

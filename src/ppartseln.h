@@ -19,12 +19,25 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#ifndef _PPARTSELN_H
+#define _PPARTSELN_H
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/*@
+  @ requires \valid(params);
+  @ requires valid_ph_param(params);
+  @ requires \valid(options);
+  @ requires \valid(list_search_space);
+  @ requires params->cmd_run == \null || valid_read_string(params->cmd_run);
+  @ requires \valid_function(params->disk->description);
+  @ requires \separated(params, options, list_search_space);
+  @ */
+// ensures  params->cmd_run == \null || valid_read_string(params->cmd_run);
 void menu_photorec(struct ph_param *params, struct ph_options *options, alloc_data_t*list_search_space);
 
 #ifdef __cplusplus
 } /* closing brace for extern "C" */
+#endif
 #endif

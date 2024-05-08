@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(DISABLED_FOR_FRAMAC)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -76,13 +77,14 @@
 #define READ_SIZE 1024*512
 extern file_check_list_t file_check_list;
 extern uint64_t free_list_allocation_end;
+extern int need_to_stop;
 
 typedef enum { BF_OK=0, BF_STOP=1, BF_EACCES=2, BF_ENOSPC=3, BF_FRAG_FOUND=4, BF_EOF=5, BF_ENOENT=6, BF_ERANGE=7} bf_status_t;
 
 static pstatus_t photorec_bf_aux(struct ph_param *params, file_recovery_t *file_recovery, alloc_data_t *list_search_space, const int phase);
 static bf_status_t photorec_bf_frag(struct ph_param *params, file_recovery_t *file_recovery, alloc_data_t *list_search_space, alloc_data_t *start_search_space, const int phase, alloc_data_t **current_search_space, uint64_t *offset, unsigned char *buffer, unsigned char *block_buffer, const unsigned int frag);
 
-static inline void file_recovery_cpy(file_recovery_t *dst, file_recovery_t *src)
+static inline void file_recovery_cpy(file_recovery_t *dst, const file_recovery_t *src)
 {
   memcpy(dst, src, sizeof(*dst));
   dst->location.list.prev=&dst->location.list;
@@ -170,6 +172,7 @@ pstatus_t photorec_bf(struct ph_param *params, const struct ph_options *options,
 	  file_recovery_t file_recovery_new;
 //	  memset(&file_recovery_new, 0, sizeof(file_recovery_t));
 	  file_recovery_new.blocksize=blocksize;
+	  file_recovery_new.location.start=offset;
 	  file_recovery_new.file_stat=NULL;
 	  td_list_for_each(tmpl, &file_check_list.list)
 	  {
@@ -178,6 +181,7 @@ pstatus_t photorec_bf(struct ph_param *params, const struct ph_options *options,
 	    td_list_for_each(tmp, &pos->file_checks[buffer[pos->offset]].list)
 	    {
 	      const file_check_t *file_check=td_list_entry_const(tmp, const file_check_t, list);
+	      /*@ assert valid_file_check_node(file_check); */
 	      if((file_check->length==0 || memcmp(buffer + file_check->offset, file_check->value, file_check->length)==0) &&
 		  file_check->header_check(buffer, read_size, 0, &file_recovery, &file_recovery_new)!=0)
 	      {
@@ -190,7 +194,6 @@ pstatus_t photorec_bf(struct ph_param *params, const struct ph_options *options,
 	  }
 	  if(file_recovery_new.file_stat!=NULL)
 	  {
-	    file_recovery_new.location.start=offset;
 	    if(options->verbose>0)
 	    {
 	      log_info("%s header found at sector %lu\n",
@@ -643,6 +646,8 @@ static bf_status_t photorec_bf_frag(struct ph_param *params, file_recovery_t *fi
 	  ind_stop=photorec_progressbar(stdscr, testbf, params,
 	      file_recovery->location.start, current_time);
 #endif
+	  if(need_to_stop!=0)
+	    ind_stop=PSTATUS_STOP;
 	  if(ind_stop!=PSTATUS_OK)
 	  {
 	    file_recovery->flags=0;
@@ -748,3 +753,4 @@ static pstatus_t photorec_bf_aux(struct ph_param *params, file_recovery_t *file_
 	return PSTATUS_OK;
   }
 }
+#endif

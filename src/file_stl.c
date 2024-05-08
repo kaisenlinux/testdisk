@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_stl)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,8 +32,8 @@
 #include "filegen.h"
 #include "common.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_stl(file_stat_t *file_stat);
-static int header_check_stl(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
 
 const file_hint_t file_hint_stl= {
   .extension="stl",
@@ -43,21 +44,39 @@ const file_hint_t file_hint_stl= {
   .register_header_check=&register_header_check_stl
 };
 
+/*@
+  @ requires buffer_size >= 84;
+  @ requires separation: \separated(&file_hint_stl, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ terminates \true;
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_stl(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
-  const uint64_t *fs_ptr=(const uint64_t *)&buffer[80];
-  unsigned int i;
   /* STL Binary format
    * http://www.ennex.com/~fabbers/StL.asp	*/
+  unsigned int i;
+  const uint32_t *fs_ptr=(const uint32_t *)&buffer[80];
+  const uint64_t filesize=80+4+(uint64_t)le32(*fs_ptr)*50;
+  /*@ assert filesize < PHOTOREC_MAX_FILE_SIZE; */
+  /*@
+    @ loop assigns i;
+    @ loop variant 80 - i;
+    @*/
   for(i=0; i<80 && buffer[i]!='\0'; i++);
   if(i>64)
     return 0;
+  /*@
+    @ loop assigns i;
+    @ loop variant 80 - i;
+    @*/
   for(i++; i<80 && buffer[i]==' '; i++);
   if(i!=80)
     return 0;
   reset_file_recovery(file_recovery_new);
   file_recovery_new->extension=file_hint_stl.extension;
-  file_recovery_new->calculated_file_size=80+4+50*le64(*fs_ptr);
+  file_recovery_new->calculated_file_size=filesize;
   file_recovery_new->data_check=&data_check_size;
   file_recovery_new->file_check=&file_check_size;
   return 1;
@@ -68,3 +87,4 @@ static void register_header_check_stl(file_stat_t *file_stat)
   /* Note: STL Ascii format is recovered in file_txt.c */
   register_header_check(0, "solid ", 6, &header_check_stl, file_stat);
 }
+#endif

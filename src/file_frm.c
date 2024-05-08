@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_frm)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -32,9 +33,8 @@
 #include "filegen.h"
 
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_frm(file_stat_t *file_stat);
-static int header_check_frm(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
-static void file_check_frm(file_recovery_t *file_recovery);
 
 const file_hint_t file_hint_frm= {
   .extension="frm",
@@ -45,6 +45,12 @@ const file_hint_t file_hint_frm= {
   .register_header_check=&register_header_check_frm
 };
 
+/*@
+  @ requires valid_file_check_param(file_recovery);
+  @ ensures  valid_file_check_result(file_recovery);
+  @ assigns *file_recovery->handle, errno, file_recovery->file_size;
+  @ assigns Frama_C_entropy_source;
+  @*/
 static void file_check_frm(file_recovery_t *file_recovery)
 {
   const unsigned char frm_footer[11]= {
@@ -53,6 +59,13 @@ static void file_check_frm(file_recovery_t *file_recovery)
   file_search_footer(file_recovery, frm_footer, sizeof(frm_footer), 1);
 }
 
+/*@
+  @ requires buffer_size >= 18;
+  @ requires separation: \separated(&file_hint_frm, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_frm(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   if(!isprint(buffer[14]) || !isprint(buffer[15]) || !isprint(buffer[16]) || !isprint(buffer[17]))
@@ -70,3 +83,4 @@ static void register_header_check_frm(file_stat_t *file_stat)
     'W', 'G', 'F', 'O', 'R', 'M'};
   register_header_check(0, frm_header,sizeof(frm_header), &header_check_frm, file_stat);
 }
+#endif

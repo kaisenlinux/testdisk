@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_nd2)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,6 +32,7 @@
 #include "types.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_nd2(file_stat_t *file_stat);
 
 const file_hint_t file_hint_nd2= {
@@ -42,6 +44,13 @@ const file_hint_t file_hint_nd2= {
   .register_header_check=&register_header_check_nd2
 };
 
+/*@
+  @ requires buffer_size >= 0x34;
+  @ requires separation: \separated(&file_hint_nd2, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_nd2(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   if(!isdigit(buffer[0x10+0x23]))
@@ -55,3 +64,4 @@ static void register_header_check_nd2(file_stat_t *file_stat)
 {
   register_header_check(0x10, "ND2 FILE SIGNATURE CHUNK NAME01!Ver", 0x23, &header_check_nd2, file_stat);
 }
+#endif

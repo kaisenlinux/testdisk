@@ -25,7 +25,11 @@
 #include <config.h>
 #endif
 
-#ifdef HAVE_NCURSES
+#if defined(DISABLED_FOR_FRAMAC)
+#undef HAVE_NCURSES
+#endif
+
+#if defined(HAVE_NCURSES)
 #include <stdio.h>
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>

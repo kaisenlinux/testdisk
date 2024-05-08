@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_studio)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,6 +32,7 @@
 #include "filegen.h"
 #include "common.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_studio(file_stat_t *file_stat);
 
 const file_hint_t file_hint_studio= {
@@ -49,6 +51,13 @@ struct silhouette_header
   uint32_t size;
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires buffer_size >= sizeof(struct silhouette_header);
+  @ requires separation: \separated(&file_hint_studio, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_studio(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct silhouette_header *hdr=(const struct silhouette_header *)buffer;
@@ -57,7 +66,7 @@ static int header_check_studio(const unsigned char *buffer, const unsigned int b
   file_recovery_new->calculated_file_size=(uint64_t)le32(hdr->size)+77;
   file_recovery_new->data_check=&data_check_size;
   file_recovery_new->file_check=&file_check_size;
-  file_recovery_new->min_filesize=65;
+  file_recovery_new->min_filesize=77;
   return 1;
 }
 
@@ -65,3 +74,4 @@ static void register_header_check_studio(file_stat_t *file_stat)
 {
   register_header_check(0, "silhouette04;", 13, &header_check_studio, file_stat);
 }
+#endif

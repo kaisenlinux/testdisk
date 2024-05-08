@@ -19,6 +19,8 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#ifndef _NETWARE_H
+#define _NETWARE_H
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -32,9 +34,25 @@ struct disk_netware
   int32_t nbr_sectors;
 };
 
+/*@
+  @ requires \valid(disk_car);
+  @ requires valid_disk(disk_car);
+  @ requires \valid(partition);
+  @ requires separation: \separated(disk_car, partition);
+  @ decreases 0;
+  @*/
 int check_netware(disk_t *disk_car, partition_t *partition);
-int recover_netware(disk_t *disk_car, const struct disk_netware *netware_block, partition_t *partition);
+
+/*@
+  @ requires \valid_read(disk_car);
+  @ requires valid_disk(disk_car);
+  @ requires \valid_read(netware_block);
+  @ requires \valid(partition);
+  @ requires separation: \separated(disk_car, netware_block, partition);
+  @*/
+int recover_netware(const disk_t *disk_car, const struct disk_netware *netware_block, partition_t *partition);
 
 #ifdef __cplusplus
 } /* closing brace for extern "C" */
+#endif
 #endif

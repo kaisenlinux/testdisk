@@ -24,6 +24,12 @@
 #include <config.h>
 #endif
 
+#if defined(DISABLED_FOR_FRAMAC)
+#undef HAVE_LIBEWF
+#undef HAVE_SYS_UTSNAME_H
+#undef ENABLE_DFXML
+#endif
+
 #ifdef ENABLE_DFXML
 #include <stdio.h>
 #ifdef HAVE_STDLIB_H
@@ -238,34 +244,29 @@ void xml_add_DFXML_creator(const char *package, const char *version)
 #endif
 #ifdef HAVE_GETEUID
   xml_out2i("uid", geteuid());
-#if 0
-#ifdef HAVE_GETPWUID
-  {
-    struct passwd *tmp=getpwuid(getuid());
-    if(tmp != NULL)
-    {
-      xml_out2s("username", tmp->pw_name);
-    }
-  }
 #endif
-#endif
-#endif
+#if !defined(DISABLED_FOR_FRAMAC)
   {
     char outstr[200];
     const time_t t = time(NULL);
+#if defined(__MINGW32__) || defined(DISABLED_FOR_FRAMAC)
+    const struct  tm *tmp = localtime(&t);
+#else
     struct tm tm_tmp;
     const struct tm *tmp = localtime_r(&t,&tm_tmp);
+#endif
     if (tmp != NULL &&
 	strftime(outstr, sizeof(outstr), "%Y-%m-%dT%H:%M:%S%z", tmp) != 0)
     {
       xml_out2s("start_time", outstr);
     }
   }
+#endif
   xml_pop("execution_environment");
   xml_pop("creator");
 }
 
-void xml_setup(disk_t *disk, const partition_t *partition)
+void xml_setup(const disk_t *disk, const partition_t *partition)
 {
   if(xml_handle==NULL)
     return;
@@ -319,7 +320,7 @@ static const char *relative_name(const char *fname)
 /* See filegen.h for the definition of file_recovery_struct */
 void xml_log_file_recovered(const file_recovery_t *file_recovery)
 {
-  struct td_list_head *tmp;
+  const struct td_list_head *tmp;
   uint64_t file_size=0;
   if(xml_handle==NULL)
     return;

@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_1cd)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,6 +32,7 @@
 #include "filegen.h"
 #include "common.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_1cd(file_stat_t *file_stat);
 
 const file_hint_t file_hint_1cd= {
@@ -49,6 +51,13 @@ struct header_1cd
   uint32_t size;
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires buffer_size >= sizeof(struct header_1cd);
+  @ requires separation: \separated(&file_hint_1cd, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_1cd(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct header_1cd *hdr=(const struct header_1cd *)buffer;
@@ -56,7 +65,7 @@ static int header_check_1cd(const unsigned char *buffer, const unsigned int buff
     return 0;
   reset_file_recovery(file_recovery_new);
   file_recovery_new->extension=file_hint_1cd.extension;
-  file_recovery_new->calculated_file_size=le32(hdr->size)<<12;
+  file_recovery_new->calculated_file_size=((uint64_t)le32(hdr->size))<<12;
   file_recovery_new->data_check=&data_check_size;
   file_recovery_new->file_check=&file_check_size;
   return 1;
@@ -67,3 +76,4 @@ static void register_header_check_1cd(file_stat_t *file_stat)
   static const unsigned char header_1cd[9]=  { '1', 'C', 'D', 'B', 'M', 'S', 'V', '8', 0x08 };
   register_header_check(0, header_1cd, sizeof(header_1cd), &header_check_1cd, file_stat);
 }
+#endif

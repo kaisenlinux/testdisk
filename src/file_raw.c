@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_raw)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -30,6 +31,7 @@
 #include "types.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_raw(file_stat_t *file_stat);
 
 const file_hint_t file_hint_raw= {
@@ -41,6 +43,12 @@ const file_hint_t file_hint_raw= {
   .register_header_check=&register_header_check_raw
 };
 
+/*@
+  @ requires separation: \separated(&file_hint_raw, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_raw(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   /* Contax Kyocera */
@@ -54,3 +62,4 @@ static void register_header_check_raw(file_stat_t *file_stat)
   static const unsigned char raw_header_contax[7]= {'A','R','E','C','O','Y','K'};
   register_header_check(25, raw_header_contax,sizeof(raw_header_contax), &header_check_raw, file_stat);
 }
+#endif

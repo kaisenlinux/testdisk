@@ -1,8 +1,8 @@
 /*
 
-    File: file_txt.h
+    File: utfsize.h
 
-    Copyright (C) 2009 Christophe GRENIER <grenier@cgsecurity.org>
+    Copyright (C) 2009-2021 Christophe GRENIER <grenier@cgsecurity.org>
   
     This software is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -19,5 +19,21 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
-int UTF2Lat(unsigned char *buffer_lower, const unsigned char *buffer, const int buf_len);
+#ifndef _UTFSIZE_H
+#define _UTFSIZE_H
+#ifdef __cplusplus
+extern "C" {
+#endif
 
+/*@
+  @ requires buf_len> 0;
+  @ requires \valid_read(buffer+(0..buf_len-1));
+  @ terminates \true;
+  @ ensures 0 <= \result <= buf_len;
+  @ assigns \nothing;
+  @*/
+int UTFsize(const unsigned char *buffer, const unsigned int buf_len);
+#ifdef __cplusplus
+} /* closing brace for extern "C" */
+#endif
+#endif

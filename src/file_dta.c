@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_dta)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -30,8 +31,8 @@
 #include "types.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_dta(file_stat_t *file_stat);
-static int header_check_dta(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
 
 const file_hint_t file_hint_dta= {
   .extension="dta",
@@ -42,6 +43,12 @@ const file_hint_t file_hint_dta= {
   .register_header_check=&register_header_check_dta
 };
 
+/*@
+  @ requires separation: \separated(&file_hint_dta, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_dta(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   /*
@@ -64,5 +71,8 @@ static void register_header_check_dta(file_stat_t *file_stat)
   static const unsigned char dta_header_71le[3]= {0x71, 0x02, 0x01};
   static const unsigned char dta_header_72le[3]= {0x72, 0x02, 0x01};
   register_header_check(0, dta_header_71le,sizeof(dta_header_71le), &header_check_dta, file_stat);
+#ifndef DISABLED_FOR_FRAMAC
   register_header_check(0, dta_header_72le,sizeof(dta_header_72le), &header_check_dta, file_stat);
+#endif
 }
+#endif

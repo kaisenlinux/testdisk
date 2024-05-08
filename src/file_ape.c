@@ -19,6 +19,7 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_ape)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -30,8 +31,8 @@
 #include "filegen.h"
 #include "common.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_ape(file_stat_t *file_stat);
-static int header_check_ape(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
 
 const file_hint_t file_hint_ape= {
   .extension="ape",
@@ -99,6 +100,13 @@ struct APE_HEADER
   uint32_t nSampleRate;		// the sample rate (typically 44100)
 };
 
+/*@
+  @ requires buffer_size >= sizeof(struct APE_HEADER_OLD);
+  @ requires separation: \separated(&file_hint_ape, buffer, file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_ape(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct APE_HEADER_OLD *ape=(const struct APE_HEADER_OLD*)buffer;
@@ -106,17 +114,21 @@ static int header_check_ape(const unsigned char *buffer, const unsigned int buff
   if(le16(ape->nVersion)>=3980)
   {
     const struct APE_DESCRIPTOR *descr=(const struct APE_DESCRIPTOR*)buffer;
-    const struct APE_HEADER *apeh=(const struct APE_HEADER*)&buffer[le32(descr->nDescriptorBytes)];
-    if(le32(descr->nDescriptorBytes) < sizeof(struct APE_DESCRIPTOR))
+    const unsigned int nDescriptorBytes=le32(descr->nDescriptorBytes);
+    if(nDescriptorBytes < sizeof(struct APE_DESCRIPTOR))
       return 0;
     if(le32(descr->nHeaderDataBytes) > 0 && le32(descr->nHeaderDataBytes) < sizeof(struct APE_HEADER))
       return 0;
-    if(le32(descr->nDescriptorBytes) >= buffer_size)
+    if(nDescriptorBytes >= buffer_size)
       return 0;
-    if(le32(descr->nDescriptorBytes) + sizeof(struct APE_HEADER) >= buffer_size)
+    if(nDescriptorBytes + sizeof(struct APE_HEADER) >= buffer_size)
       return 0;
-    if(le16(apeh->nChannels)<1 || le16(apeh->nChannels)>2)
-      return 0;
+    {
+      const struct APE_HEADER *apeh=(const struct APE_HEADER*)&buffer[nDescriptorBytes];
+      /*@ assert \valid_read(apeh); */
+      if(le16(apeh->nChannels)<1 || le16(apeh->nChannels)>2)
+	return 0;
+    }
     reset_file_recovery(file_recovery_new);
     file_recovery_new->extension=file_hint_ape.extension;
     return 1;
@@ -138,3 +150,4 @@ static void register_header_check_ape(file_stat_t *file_stat)
   static const unsigned char ape_header[4]= { 'M', 'A', 'C', ' '};
   register_header_check(0, ape_header,sizeof(ape_header), &header_check_ape, file_stat);
 }
+#endif

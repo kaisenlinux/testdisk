@@ -24,6 +24,19 @@
 #include <config.h>
 #endif
 
+#if defined(__CYGWIN__) || defined(__MINGW32__) || defined(DJGPP) || !defined(HAVE_GETEUID)
+#undef SUDO_BIN
+#endif
+
+#if defined(DISABLED_FOR_FRAMAC)
+#undef HAVE_LIBEWF
+#undef HAVE_SIGACTION
+#undef HAVE_NCURSES
+#undef ENABLE_DFXML
+#undef HAVE_SETLOCALE
+#undef HAVE_GETEUID
+#endif
+
 #include <stdio.h>
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
@@ -77,7 +90,12 @@
 #include "pdiskseln.h"
 #include "dfxml.h"
 
-extern file_enable_t list_file_enable[];
+int need_to_stop=0;
+extern file_enable_t array_file_enable[];
+#ifndef DISABLED_FOR_FRAMAC
+extern uint64_t gpfh_nbr;
+extern uint64_t gpls_nbr;
+#endif
 
 #ifdef HAVE_SIGACTION
 static struct sigaction action;
@@ -87,12 +105,19 @@ static void sighup_hdlr(int sig)
 {
   if(sig == SIGINT)
     log_critical("SIGINT detected! PhotoRec has been killed.\n");
-  else
+  else if(sig == SIGHUP)
     log_critical("SIGHUP detected! PhotoRec has been killed.\n");
+  else
+    log_critical("SIGTERM detected! PhotoRec has been killed.\n");
   log_flush();
-  action.sa_handler=SIG_DFL;
-  sigaction(sig,&action,NULL);
-  kill(0, sig);
+  if(need_to_stop==1)
+  {
+    action.sa_handler=SIG_DFL;
+    sigaction(sig,&action,NULL);
+    kill(0, sig);
+    return ;
+  }
+  need_to_stop=1;
 }
 #endif
 
@@ -108,6 +133,7 @@ static void display_help(void)
       "in the recup_dir directory.\n");
 }
 
+#ifndef DISABLED_FOR_FRAMAC
 static void display_version(void)
 {
   printf("\n");
@@ -118,22 +144,33 @@ static void display_version(void)
 #endif
   printf("ext2fs lib: %s, ntfs lib: %s, ewf lib: %s, libjpeg: %s, curses lib: %s, zlib: %s\n",
       td_ext2fs_version(), td_ntfs_version(), td_ewf_version(), td_jpeg_version(), td_curses_version(), td_zlib_version());
+#ifdef HAVE_ICONV
+  printf("iconv support: yes\n");
+#else
+  printf("iconv support: no\n");
+#endif
   printf("OS: %s\n" , get_os());
 }
+#endif
 
 int main( int argc, char **argv )
 {
+  list_disk_t *list_disk=NULL;
+  /*@ assert list_disk == \null; */
+  /*@ assert valid_list_disk(list_disk); */
   int i;
+#ifdef DISABLED_FOR_FRAMAC
+  char *argv_framac[]={ "photorec", "/cmd", "file.dd", "search", NULL };
+#endif
 #ifdef SUDO_BIN
   int use_sudo=0;
 #endif
   int create_log=TD_LOG_NONE;
   int run_setlocale=1;
   int testdisk_mode=TESTDISK_O_RDONLY|TESTDISK_O_READAHEAD_32K;
-  list_disk_t *list_disk=NULL;
   list_disk_t *element_disk;
   const char *logfile="photorec.log";
-  FILE *log_handle=NULL;
+  int log_opened=0;
   int log_errno=0;
   struct ph_options options={
     .paranoid=1,
@@ -142,20 +179,27 @@ int main( int argc, char **argv )
     .expert=0,
     .lowmem=0,
     .verbose=0,
-    .list_file_format=list_file_enable
+    .list_file_format=array_file_enable
   };
   struct ph_param params;
+  if(argc <= 0)
+    return 1;
+  /*@ assert valid_list_disk(list_disk); */ ;
   params.recup_dir=NULL;
   params.cmd_device=NULL;
   params.cmd_run=NULL;
   params.carve_free_space_only=0;
-  /* random (weak is ok) is need fot GPT */
-  srand(time(NULL));
+  params.disk=NULL;
+  /*@ assert valid_ph_param(&params); */
+  /* random (weak is ok) is needed for GPT */
+  srand(time(NULL)& (long)0xffffffff);
+  /*@ assert valid_list_disk(list_disk); */ ;
 #ifdef HAVE_SIGACTION
   /* set up the signal handler for SIGINT & SIGHUP */
   sigemptyset(&action.sa_mask);
   sigaddset(&action.sa_mask, SIGINT);
   sigaddset(&action.sa_mask, SIGHUP);
+  sigaddset(&action.sa_mask, SIGTERM);
   action.sa_handler  = &sighup_hdlr;
   action.sa_flags = 0;
   if(sigaction(SIGINT, &action, NULL)==-1)
@@ -168,10 +212,27 @@ int main( int argc, char **argv )
     printf("Error on SIGACTION call\n");
     return -1;
   }
+  if(sigaction(SIGTERM, &action, NULL)==-1)
+  {
+    printf("Error on SIGACTION call\n");
+    return -1;
+  }
 #endif
+#ifndef DISABLED_FOR_FRAMAC
   printf("PhotoRec %s, Data Recovery Utility, %s\nChristophe GRENIER <grenier@cgsecurity.org>\nhttps://www.cgsecurity.org\n",VERSION,TESTDISKDATE);
+#endif
+#if defined(DISABLED_FOR_FRAMAC)
+  argc=4;
+  argv=argv_framac;
+#endif
+  /*@ assert valid_list_disk(list_disk); */
+  /*@
+    @ loop unroll 256;
+    @ loop invariant valid_list_disk(list_disk);
+    @*/
   for(i=1;i<argc;i++)
   {
+#ifndef DISABLED_FOR_FRAMAC
     if((strcmp(argv[i],"/logname")==0) ||(strcmp(argv[i],"-logname")==0))
     {
       if(i+2>=argc)
@@ -180,7 +241,9 @@ int main( int argc, char **argv )
 	free(params.recup_dir);
 	return 1;
       }
+      /*@ assert valid_read_string(argv[i+1]); */
       logfile=argv[++i];
+      /*@ assert valid_read_string(logfile); */
     }
     else if((strcmp(argv[i],"/nolog")==0) ||(strcmp(argv[i],"-nolog")==0))
     {
@@ -197,7 +260,7 @@ int main( int argc, char **argv )
       if(create_log==TD_LOG_NONE)
         create_log=TD_LOG_APPEND;
     }
-    else if(((strcmp(argv[i],"/d")==0)||(strcmp(argv[i],"-d")==0)) &&(i+1<argc))
+    else if(i+1<argc && ((strcmp(argv[i],"/d")==0)||(strcmp(argv[i],"-d")==0)))
     {
       const int len=strlen(argv[i+1]);
       if(argv[i+1][len-1]=='\\' || argv[i+1][len-1]=='/')
@@ -205,9 +268,13 @@ int main( int argc, char **argv )
         params.recup_dir=(char *)MALLOC(len + strlen(DEFAULT_RECUP_DIR) + 1);
         strcpy(params.recup_dir,argv[i+1]);
         strcat(params.recup_dir,DEFAULT_RECUP_DIR);
+	/*@ assert \freeable(params.recup_dir); */
       }
       else
+      {
         params.recup_dir=strdup(argv[i+1]);
+	/*@ assert params.recup_dir==\null || \freeable(params.recup_dir); */
+      }
       i++;
     }
     else if((strcmp(argv[i],"/all")==0) || (strcmp(argv[i],"-all")==0))
@@ -231,7 +298,9 @@ int main( int argc, char **argv )
     }
     else if((strcmp(argv[i],"/nosetlocale")==0) || (strcmp(argv[i],"-nosetlocale")==0))
       run_setlocale=0;
-    else if(strcmp(argv[i],"/cmd")==0)
+    else
+#endif
+    if(strcmp(argv[i],"/cmd")==0)
     {
       if(i+2>=argc)
       {
@@ -239,24 +308,42 @@ int main( int argc, char **argv )
 	free(params.recup_dir);
 	return 1;
       }
+#ifndef DISABLED_FOR_FRAMAC
+      if(strcmp(argv[i+1],"resume")==0)
+      {
+	params.cmd_device=argv[++i];
+      }
+      else
+#endif
       {
         disk_t *disk_car;
         params.cmd_device=argv[++i];
+#ifdef DISABLED_FOR_FRAMAC
+        params.cmd_device="disk.dd";
+#endif
         params.cmd_run=argv[++i];
         /* There is no log currently */
         disk_car=file_test_availability(params.cmd_device, options.verbose, testdisk_mode);
+	/*@ assert disk_car == \null || valid_disk(disk_car); */
         if(disk_car==NULL)
         {
           printf("\nUnable to open file or device %s: %s\n", params.cmd_device, strerror(errno));
 	  free(params.recup_dir);
 	  return 1;
         }
+	/*@ assert  \valid(disk_car); */
+	/*@ assert 0 < disk_car->geom.cylinders < 0x2000000000000 && 0 < disk_car->geom.heads_per_cylinder <= 255 && 0 < disk_car->geom.sectors_per_head <= 63; */
+	/*@ assert valid_read_string(disk_car->device); */
 	list_disk=insert_new_disk(list_disk,disk_car);
+	/*@ assert list_disk ==\null || (\valid(list_disk) && valid_disk(list_disk->disk)); */
+	/*@ assert valid_list_disk(list_disk); */
       }
     }
+#ifndef DISABLED_FOR_FRAMAC
     else
     {
       disk_t *disk_car=file_test_availability(argv[i], options.verbose, testdisk_mode);
+      /*@ assert  valid_disk(disk_car); */
       if(disk_car==NULL)
       {
         printf("\nUnable to open file or device %s: %s\n", argv[i], strerror(errno));
@@ -264,13 +351,18 @@ int main( int argc, char **argv )
 	return 1;
       }
       list_disk=insert_new_disk(list_disk,disk_car);
+      /*@ assert list_disk ==\null || (\valid(list_disk) && valid_disk(list_disk->disk)); */
+      /*@ assert valid_list_disk(list_disk); */
     }
+#endif
   }
-#ifdef ENABLE_DFXML
+  /*@ assert valid_ph_param(&params); */
+#if defined(ENABLE_DFXML)
   xml_set_command_line(argc, argv);
 #endif
+  /*@ assert valid_read_string(logfile); */
   if(create_log!=TD_LOG_NONE)
-    log_handle=log_open(logfile, create_log, &log_errno);
+    log_opened=log_open(logfile, create_log, &log_errno);
 #ifdef HAVE_SETLOCALE
   if(run_setlocale>0)
   {
@@ -284,8 +376,8 @@ int main( int argc, char **argv )
     }
   }
 #endif
-  if(create_log!=TD_LOG_NONE && log_handle==NULL)
-    log_handle=log_open_default(logfile, create_log, &log_errno);
+  if(create_log!=TD_LOG_NONE && log_opened==0)
+    log_opened=log_open_default(logfile, create_log, &log_errno);
 #ifdef HAVE_NCURSES
   /* ncurses need locale for correct unicode support */
   if(start_ncurses("PhotoRec", argv[0]))
@@ -296,11 +388,11 @@ int main( int argc, char **argv )
   }
   {
     const char*filename=logfile;
-    while(create_log!=TD_LOG_NONE && log_handle==NULL)
+    while(create_log!=TD_LOG_NONE && log_opened==0)
     {
       filename=ask_log_location(filename, log_errno);
       if(filename!=NULL)
-	log_handle=log_open(filename, create_log, &log_errno);
+	log_opened=log_open(filename, create_log, &log_errno);
       else
 	create_log=TD_LOG_NONE;
     }
@@ -310,19 +402,15 @@ int main( int argc, char **argv )
   wprintw(stdscr, "Disk identification, please wait...\n");
   wrefresh(stdscr);
 #endif
-  if(log_handle!=NULL)
   {
     time_t my_time;
-#ifdef HAVE_DUP2
-    dup2(fileno(log_handle),2);
-#endif
     my_time=time(NULL);
     log_info("\n\n%s",ctime(&my_time));
-    log_info("Command line: PhotoRec");
-    for(i=1;i<argc;i++)
-      log_info(" %s", argv[i]);
-    log_info("\n\n");
   }
+  log_info("Command line: PhotoRec");
+  for(i=1;i<argc;i++)
+    log_info(" %s", argv[i]);
+  log_info("\n\n");
   log_info("PhotoRec %s, Data Recovery Utility, %s\nChristophe GRENIER <grenier@cgsecurity.org>\nhttps://www.cgsecurity.org\n", VERSION, TESTDISKDATE);
   log_info("OS: %s\n" , get_os());
   log_info("Compiler: %s\n", get_compiler());
@@ -331,17 +419,15 @@ int main( int argc, char **argv )
 #endif
   log_info("ext2fs lib: %s, ntfs lib: %s, ewf lib: %s, libjpeg: %s, curses lib: %s\n",
       td_ext2fs_version(), td_ntfs_version(), td_ewf_version(), td_jpeg_version(), td_curses_version());
-#if defined(__CYGWIN__) || defined(__MINGW32__) || defined(DJGPP)
-#else
-#ifdef HAVE_GETEUID
+#if defined(HAVE_GETEUID) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(DJGPP)
   if(geteuid()!=0)
   {
     log_warning("User is not root!\n");
   }
 #endif
-#endif
   log_flush();
   screen_buffer_reset();
+#ifndef DISABLED_FOR_FRAMAC
   /* Scan for available device only if no device or image has been supplied in parameter */
   if(list_disk==NULL)
     list_disk=hd_parse(list_disk, options.verbose, testdisk_mode);
@@ -352,18 +438,13 @@ int main( int argc, char **argv )
     element_disk->disk=new_diskcache(element_disk->disk, testdisk_mode);
   }
   log_disk_list(list_disk);
-  reset_list_file_enable(options.list_file_format);
+#endif
+  reset_array_file_enable(options.list_file_format);
   file_options_load(options.list_file_format);
 #ifdef SUDO_BIN
-  if(list_disk==NULL)
+  if(list_disk==NULL && geteuid()!=0)
   {
-#if defined(__CYGWIN__) || defined(__MINGW32__) || defined(DJGPP)
-#else
-#ifdef HAVE_GETEUID
-    if(geteuid()!=0)
       use_sudo=2;
-#endif
-#endif
   }
   if(use_sudo==0)
     use_sudo=do_curses_photorec(&params, &options, list_disk);
@@ -373,14 +454,25 @@ int main( int argc, char **argv )
 #ifdef HAVE_NCURSES
   end_ncurses();
 #endif
+#ifndef DISABLED_FOR_FRAMAC
+  if(options.verbose > 0)
+  {
+    log_info("perf: get_prev_file_header: %lu, get_prev_location_smart: %lu\n", (long unsigned)gpfh_nbr, (long unsigned)gpls_nbr);
+  }
   log_info("PhotoRec exited normally.\n");
+#endif
   if(log_close()!=0)
   {
+#ifndef DISABLED_FOR_FRAMAC
     printf("PhotoRec: Log file corrupted!\n");
+#endif
   }
   else if(params.cmd_run!=NULL && params.cmd_run[0]!='\0')
   {
+    /*@ assert valid_read_string(params.cmd_run); */
+#ifndef DISABLED_FOR_FRAMAC
     printf("PhotoRec syntax error: %s\n", params.cmd_run);
+#endif
   }
 #ifdef SUDO_BIN
   if(use_sudo>0)
@@ -394,7 +486,9 @@ int main( int argc, char **argv )
     run_sudo(argc, argv, create_log);
   }
 #endif
+#ifndef DISABLED_FOR_FRAMAC
   delete_list_disk(list_disk);
+#endif
   free(params.recup_dir);
 #ifdef ENABLE_DFXML
   xml_clear_command_line();

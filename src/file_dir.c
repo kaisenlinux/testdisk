@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_dir)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -33,13 +34,10 @@
 #include "types.h"
 #include "filegen.h"
 #include "common.h"
-#include "fat.h"
-#include "dir.h"
-#include "fat_dir.h"
 #include "fat_common.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_dir(file_stat_t *file_stat);
-static int header_check_dir(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
 
 const file_hint_t file_hint_dir= {
   .extension="fat",
@@ -50,6 +48,11 @@ const file_hint_t file_hint_dir= {
   .register_header_check=&register_header_check_dir
 };
 
+/*@
+  @ requires file_recovery->file_rename==&file_rename_fatdir;
+  @ requires valid_file_rename_param(file_recovery);
+  @ ensures  valid_file_rename_result(file_recovery);
+  @*/
 static void file_rename_fatdir(file_recovery_t *file_recovery)
 {
   unsigned char buffer[512];
@@ -63,11 +66,24 @@ static void file_rename_fatdir(file_recovery_t *file_recovery)
   fclose(file);
   if(buffer_size<32)
     return;
+  /*@ assert buffer_size >= 32; */
   cluster=fat_get_cluster_from_entry((const struct msdos_dir_entry *)&buffer[0]);
   sprintf(buffer_cluster, "cluster_%u", cluster);
+#if defined(DISABLED_FOR_FRAMAC)
+  buffer_cluster[sizeof(buffer_cluster)-1]='\0';
+#endif
   file_rename(file_recovery, buffer_cluster, strlen(buffer_cluster), 0, NULL, 1);
 }
 
+/*@
+  @ requires file_recovery->data_check == &data_check_fatdir;
+  @ requires buffer_size >= 2;
+  @ requires valid_data_check_param(buffer, buffer_size, file_recovery);
+  @ terminates \true;
+  @ ensures  valid_data_check_result(\result, file_recovery);
+  @ ensures \result == DC_STOP;
+  @ assigns file_recovery->calculated_file_size;
+  @*/
 static data_check_t data_check_fatdir(const unsigned char *buffer, const unsigned int buffer_size, file_recovery_t *file_recovery)
 {
   /* Save only one cluster */
@@ -75,6 +91,13 @@ static data_check_t data_check_fatdir(const unsigned char *buffer, const unsigne
   return DC_STOP;
 }
 
+/*@
+  @ requires buffer_size >= sizeof(struct msdos_dir_entry);
+  @ requires separation: \separated(&file_hint_dir, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_dir(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct msdos_dir_entry *de=(const struct msdos_dir_entry*)buffer;
@@ -86,6 +109,7 @@ static int header_check_dir(const unsigned char *buffer, const unsigned int buff
   file_recovery_new->file_check=&file_check_size;
   file_recovery_new->file_rename=&file_rename_fatdir;
   file_recovery_new->time=date_dos2unix(le16(de->time),le16(de->date));
+  /*@ assert valid_file_recovery(file_recovery_new); */
   return 1;
 }
 
@@ -93,3 +117,4 @@ static void register_header_check_dir(file_stat_t *file_stat)
 {
   register_header_check(0, ".          ", 8+3, &header_check_dir, file_stat);
 }
+#endif

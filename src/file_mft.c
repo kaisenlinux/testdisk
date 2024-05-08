@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_mft)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -30,10 +31,10 @@
 #include "types.h"
 #include "filegen.h"
 #include "common.h"
-#include "ntfs.h"
+#include "ntfs_struct.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_mft(file_stat_t *file_stat);
-static int header_check_mft(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
 
 const file_hint_t file_hint_mft= {
   .extension="mft",
@@ -44,6 +45,10 @@ const file_hint_t file_hint_mft= {
   .register_header_check=&register_header_check_mft
 };
 
+/*@
+  @ requires valid_file_rename_param(file_recovery);
+  @ ensures  valid_file_rename_result(file_recovery);
+  @*/
 static void file_rename_mft(file_recovery_t *file_recovery)
 {
   unsigned char buffer[512];
@@ -57,10 +62,24 @@ static void file_rename_mft(file_recovery_t *file_recovery)
   fclose(file);
   if(buffer_size<54)
     return;
+#if defined(__FRAMAC__)
+  Frama_C_make_unknown(buffer, sizeof(buffer));
+#endif
+  /*@ assert \initialized(buffer + (0 .. sizeof(buffer)-1)); */
   sprintf(buffer_cluster, "record_%u", (unsigned int)le32(record->mft_record_number));
+#if defined(DISABLED_FOR_FRAMAC)
+  buffer_cluster[sizeof(buffer_cluster)-1]='\0';
+#endif
   file_rename(file_recovery, buffer_cluster, strlen(buffer_cluster), 0, NULL, 1);
 }
 
+/*@
+  @ requires buffer_size >= sizeof(struct ntfs_mft_record);
+  @ requires separation: \separated(&file_hint_mft, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_mft(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct ntfs_mft_record *mft_rec=(const struct ntfs_mft_record *)buffer;
@@ -78,7 +97,7 @@ static int header_check_mft(const unsigned char *buffer, const unsigned int buff
     return 0;
   reset_file_recovery(file_recovery_new);
   file_recovery_new->extension=file_hint_mft.extension;
-  file_recovery_new->calculated_file_size=bytes_allocated;
+  file_recovery_new->calculated_file_size=td_max(file_recovery_new->blocksize, bytes_allocated);
   file_recovery_new->data_check=&data_check_size;
   file_recovery_new->file_check=&file_check_size;
   file_recovery_new->file_rename=&file_rename_mft;
@@ -89,3 +108,4 @@ static void register_header_check_mft(file_stat_t *file_stat)
 {
   register_header_check(0, "FILE", 4, &header_check_mft, file_stat);
 }
+#endif

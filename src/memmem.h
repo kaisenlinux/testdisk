@@ -21,7 +21,17 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#ifndef _MEMMEM_H
+#define _MEMMEM_H
 
+/*@
+  @ requires \valid_read((const char *)haystack+(0..haystack_len-1));
+  @ requires \valid_read((const char *)needle+(0..needle_len-1));
+  @ assigns  \nothing;
+  @ ensures result_null_or_in_haystack:
+  @   \result == \null
+  @   || (\subset((char *)\result, (char *)haystack+(0..haystack_len-needle_len)) && \valid_read((char *)\result));
+  @*/
 static inline const void *td_memmem(const void *haystack, const unsigned int haystack_len, const void *needle, const unsigned int needle_len)
 {
   const char *begin;
@@ -30,6 +40,7 @@ static inline const void *td_memmem(const void *haystack, const unsigned int hay
   if (needle_len == 0)
     /* The first occurrence of the empty string is deemed to occur at
        the beginning of the string.  */
+    /*@ assert (\subset((char *)haystack, (char *)haystack+(0..haystack_len-needle_len)) && \valid_read((char *)haystack)); */
     return (const void *) haystack;
 
   /* Sanity check, otherwise the loop might search through the whole
@@ -37,11 +48,22 @@ static inline const void *td_memmem(const void *haystack, const unsigned int hay
   if (haystack_len < needle_len)
     return NULL;
 
+  /*@
+    @ loop invariant \valid_read(begin);
+    @ loop invariant \subset(begin, (char *)haystack+(0..haystack_len-needle_len+1));
+    @ loop assigns begin;
+    @*/
   for (begin = (const char *) haystack; begin <= last_possible; ++begin)
+  {
     if (begin[0] == ((const char *) needle)[0] &&
         !memcmp ((const void *) &begin[1],
                  (const void *) ((const char *) needle + 1),
                  needle_len - 1))
+    {
+      /*@ assert (\subset(begin, (char *)haystack+(0..haystack_len-needle_len)) && \valid_read(begin)); */
       return (const void *) begin;
+    }
+  }
   return NULL;
 }
+#endif

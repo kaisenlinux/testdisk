@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_gi)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,6 +32,7 @@
 #include "filegen.h"
 #include "common.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_gi(file_stat_t *file_stat);
 
 const file_hint_t file_hint_gi= {
@@ -48,12 +50,22 @@ struct header_gi
   uint64_t size;
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires buffer_size >= sizeof(struct header_gi);
+  @ requires separation: \separated(&file_hint_gi, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_gi(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct header_gi *hdr=(const struct header_gi *)buffer;
+  const uint64_t size=le64(hdr->size);
+  if(size > PHOTOREC_MAX_FILE_SIZE)
+    return 0;
   reset_file_recovery(file_recovery_new);
   file_recovery_new->extension=file_hint_gi.extension;
-  file_recovery_new->calculated_file_size=le64(hdr->size)+20;
+  file_recovery_new->calculated_file_size=size+20;
   file_recovery_new->data_check=&data_check_size;
   file_recovery_new->file_check=&file_check_size;
   return 1;
@@ -67,3 +79,4 @@ static void register_header_check_gi(file_stat_t *file_stat)
   };
   register_header_check(0, gi_header, sizeof(gi_header), &header_check_gi, file_stat);
 }
+#endif

@@ -19,10 +19,21 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#ifndef _PHRECN_H
+#define _PHRECN_H
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/*@
+  @ requires \valid(params);
+  @ requires valid_ph_param(params);
+  @ requires \valid_read(options);
+  @ requires \valid(list_search_space);
+  @ requires \separated(params, options, list_search_space);
+  @ requires params->cmd_run == \null || valid_read_string(params->cmd_run);
+  @ requires valid_read_string(params->recup_dir);
+  @*/
 int photorec(struct ph_param *params, const struct ph_options *options, alloc_data_t *list_search_space);
 #ifdef HAVE_NCURSES
 void interface_file_select_ncurses(file_enable_t *files_enable);
@@ -31,4 +42,5 @@ void interface_options_photorec_ncurses(struct ph_options *options);
 
 #ifdef __cplusplus
 } /* closing brace for extern "C" */
+#endif
 #endif

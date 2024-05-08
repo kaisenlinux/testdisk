@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_pyc)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -34,8 +35,8 @@
 #include "common.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_pyc(file_stat_t *file_stat);
-static int header_check_pyc(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
 
 const file_hint_t file_hint_pyc= {
   .extension="pyc",
@@ -51,6 +52,13 @@ struct pyc_header {
   uint32_t modtime;
 };
 
+/*@
+  @ requires buffer_size >= 12;
+  @ requires separation: \separated(&file_hint_pyc, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_pyc(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct pyc_header *pyc=(const struct pyc_header *)buffer;
@@ -80,6 +88,7 @@ static void register_header_check_pyc(file_stat_t *file_stat)
   static const unsigned char pyc_33_magic[4]= { 0x9e, 0x0c, '\r', '\n'};
   static const unsigned char pyc_34_magic[4]= { 0xee, 0x0c, '\r', '\n'};
   register_header_check(0, pyc_15_magic, sizeof(pyc_15_magic), &header_check_pyc, file_stat);
+#ifndef DISABLED_FOR_FRAMAC
   register_header_check(0, pyc_20_magic, sizeof(pyc_20_magic), &header_check_pyc, file_stat);
   register_header_check(0, pyc_21_magic, sizeof(pyc_21_magic), &header_check_pyc, file_stat);
   register_header_check(0, pyc_22_magic, sizeof(pyc_22_magic), &header_check_pyc, file_stat);
@@ -93,4 +102,6 @@ static void register_header_check_pyc(file_stat_t *file_stat)
   register_header_check(0, pyc_32_magic, sizeof(pyc_32_magic), &header_check_pyc, file_stat);
   register_header_check(0, pyc_33_magic, sizeof(pyc_33_magic), &header_check_pyc, file_stat);
   register_header_check(0, pyc_34_magic, sizeof(pyc_34_magic), &header_check_pyc, file_stat);
+#endif
 }
+#endif

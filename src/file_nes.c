@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_nes)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,6 +32,7 @@
 #include "filegen.h"
 #include "common.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_nes(file_stat_t *file_stat);
 
 const file_hint_t file_hint_nes= {
@@ -49,6 +51,13 @@ struct nes_header
 	uint8_t chrsize;
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires buffer_size >= sizeof(struct nes_header);
+  @ requires separation: \separated(&file_hint_nes, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_nes(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct nes_header *bm=(const struct nes_header *)buffer;
@@ -56,7 +65,7 @@ static int header_check_nes(const unsigned char *buffer, const unsigned int buff
   reset_file_recovery(file_recovery_new);
   file_recovery_new->extension=file_hint_nes.extension;
   file_recovery_new->min_filesize=16;
-  file_recovery_new->calculated_file_size=(uint64_t)size;
+  file_recovery_new->calculated_file_size=size;
   file_recovery_new->data_check=&data_check_size;
   file_recovery_new->file_check=&file_check_size;
   return 1;
@@ -67,3 +76,4 @@ static void register_header_check_nes(file_stat_t *file_stat)
   static const unsigned char nes_header[4]= {'N','E','S',0x1A};
   register_header_check(0, nes_header,sizeof(nes_header), &header_check_nes, file_stat);
 }
+#endif

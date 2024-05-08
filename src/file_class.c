@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_class)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,8 +32,8 @@
 #include "common.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_class(file_stat_t *file_stat);
-static int header_check_class(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
 
 const file_hint_t file_hint_class= {
   .extension="class",
@@ -43,9 +44,6 @@ const file_hint_t file_hint_class= {
   .register_header_check=&register_header_check_class
 };
 
-/* http://en.wikipedia.org/wiki/Class_(file_format) */
-static const unsigned char class_magic[4]= { 0xCA, 0xFE, 0xBA, 0xBE };
-
 struct class_header {
   uint32_t magic_number;
   uint16_t minor_version;
@@ -53,11 +51,13 @@ struct class_header {
   uint16_t constant_pool_count;
 };
 
-static void register_header_check_class(file_stat_t *file_stat)
-{
-  register_header_check(0, class_magic, sizeof(class_magic), &header_check_class, file_stat);
-}
-
+/*@
+  @ requires buffer_size >= sizeof(struct class_header);
+  @ requires separation: \separated(&file_hint_class, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_class(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct class_header *cafe=(const struct class_header *)buffer;
@@ -71,3 +71,11 @@ static int header_check_class(const unsigned char *buffer, const unsigned int bu
   }
   return 0;
 }
+
+static void register_header_check_class(file_stat_t *file_stat)
+{
+  /* https://en.wikipedia.org/wiki/Class_(file_format) */
+  static const unsigned char class_magic[4]= { 0xCA, 0xFE, 0xBA, 0xBE };
+  register_header_check(0, class_magic, sizeof(class_magic), &header_check_class, file_stat);
+}
+#endif

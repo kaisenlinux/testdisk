@@ -22,6 +22,11 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
+
+#if defined(DISABLED_FOR_FRAMAC)
+#undef HAVE_UTIME
+#endif
+
 #include "types.h"
 #ifdef HAVE_UTIME_H
 #include <utime.h>

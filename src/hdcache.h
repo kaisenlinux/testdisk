@@ -19,12 +19,22 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#ifndef _HDCACHE_H
+#define _HDCACHE_H
 #ifdef __cplusplus
 extern "C" {
 #endif
+#if !defined(DISABLED_FOR_FRAMAC)
 
+/*@
+  @ requires \valid(disk_car);
+  @ requires valid_disk(disk_car);
+  @ ensures \valid(\result);
+  @*/
 disk_t *new_diskcache(disk_t *disk_car, const unsigned int cache_size_min);
 
+#endif
 #ifdef __cplusplus
 } /* closing brace for extern "C" */
+#endif
 #endif

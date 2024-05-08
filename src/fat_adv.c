@@ -88,7 +88,6 @@ static int check_FAT_dir_entry(const unsigned char *entry, const unsigned int en
 static unsigned long int get_subdirectory(disk_t *disk_car,const uint64_t hd_offset, const unsigned long int i);
 
 #ifdef HAVE_NCURSES
-static void fat_date_unix2dos(int unix_date,unsigned short *mstime, unsigned short *msdate);
 static int fat32_create_rootdir(disk_t *disk_car,const partition_t *partition, const unsigned int reserved, const unsigned int fat_length, const unsigned int root_cluster, const unsigned int sectors_per_cluster, const int verbose, file_info_t *rootdir_list, const unsigned int fats);
 static upart_type_t select_fat_info(const info_offset_t *info_offset, const unsigned int nbr_offset,unsigned int*reserved, unsigned int*fat_length, const unsigned long int max_sector_offset, unsigned int *fats);
 #endif
@@ -173,7 +172,7 @@ static unsigned long int get_subdirectory(disk_t *disk_car,const uint64_t hd_off
 #ifdef HAVE_NCURSES
 #define INTER_DIR 16
 
-static int ask_root_directory(disk_t *disk_car, const partition_t *partition, const file_info_t*dir_list, const unsigned long int cluster)
+static int ask_root_directory(const disk_t *disk_car, const partition_t *partition, const file_info_t*dir_list, const unsigned long int cluster)
 {
   /* Return value
    * -1: quit
@@ -562,7 +561,7 @@ static unsigned int fat32_find_root_cluster(disk_t *disk_car,const partition_t *
 
 #ifdef HAVE_NCURSES
 
-static void fat_date_unix2dos(int unix_date,unsigned short *mstime, unsigned short *msdate)
+static void fat_date_unix2dos(time_t unix_date,unsigned short *mstime, unsigned short *msdate)
 {
   static const int day_n[] = { 0,31,59,90,120,151,181,212,243,273,304,334,0,0,0,0 };
                           /* JanFebMarApr May Jun Jul Aug Sep Oct Nov Dec */
@@ -1260,6 +1259,29 @@ static void create_fat_boot_sector(disk_t *disk_car, partition_t *partition, con
   free(orgboot);
   free(newboot);
 }
+
+/*@
+  @ decreases number;
+  @ assigns \nothing;
+  @*/
+static unsigned int up2power_aux(const unsigned int number)
+{
+  if(number==0)
+	return 0;
+  else
+	return(1+up2power_aux(number/2));
+}
+
+/*@
+  @ assigns \nothing;
+  @*/
+static unsigned int up2power(const unsigned int number)
+{
+  if(number==0)
+    return 1;
+  return (1<<up2power_aux(number-1));
+}
+
 
 static int calcul_sectors_per_cluster(const upart_type_t upart_type, const unsigned long int data_size, const unsigned int fat_length, const unsigned int sector_size)
 {

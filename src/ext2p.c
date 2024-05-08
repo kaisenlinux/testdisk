@@ -22,6 +22,12 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
+
+#if defined(DISABLED_FOR_FRAMAC)
+#undef HAVE_LIBEXT2FS
+#endif
+
+#if defined(HAVE_LIBEXT2FS)
 #include <stdio.h>
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
@@ -33,6 +39,7 @@
 #include "common.h"
 #include "list.h"
 #include "filegen.h"
+#include "photorec.h"
 #include "intrf.h"
 #include "dir.h"
 #ifdef HAVE_EXT2FS_EXT2_FS_H
@@ -47,7 +54,6 @@
 #include "log.h"
 #include "log_part.h"
 
-#ifdef HAVE_LIBEXT2FS
 unsigned int ext2_remove_used_space(disk_t *disk, const partition_t *partition, alloc_data_t *list_search_space)
 {
   dir_data_t dir_data;
@@ -64,9 +70,7 @@ unsigned int ext2_remove_used_space(disk_t *disk, const partition_t *partition, 
       break;
   }
   {
-    const unsigned int sizeof_buffer=512;
     struct ext2_dir_struct *ls=(struct ext2_dir_struct *)dir_data.private_dir_data;
-    unsigned char *buffer;
     uint64_t start_free=0;
     uint64_t end_free=0;
     unsigned long int block;
@@ -89,7 +93,6 @@ unsigned int ext2_remove_used_space(disk_t *disk, const partition_t *partition, 
     end=bitmap->end;
 #endif
     log_trace("ext2_remove_used_space %lu-%lu\n", start, end);
-    buffer=(unsigned char *)MALLOC(sizeof_buffer);
     for(block=start;block<=end;block++)
     {
 #ifdef HAVE_EXT2FS_GET_GENERIC_BITMAP_START
@@ -110,7 +113,6 @@ unsigned int ext2_remove_used_space(disk_t *disk, const partition_t *partition, 
 	}
       }
     }
-    free(buffer);
     if(start_free != end_free)
       del_search_space(list_search_space, start_free, end_free);
     dir_data.close(&dir_data);

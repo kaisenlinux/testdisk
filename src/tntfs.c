@@ -37,6 +37,7 @@
 #include "intrfn.h"
 #include "dirpart.h"
 #include "ntfs.h"
+#include "ntfs_adv.h"
 #include "ntfs_fix.h"
 #include "io_redir.h"
 #include "log.h"
@@ -115,7 +116,7 @@ static int is_no_confirm_command(char **current_cmd)
   return 0;
 }
 
-static const char *ntfs_boot_sector_scan(disk_t *disk, partition_t *partition, unsigned char *buffer_bs, unsigned char *buffer_backup_bs, unsigned int *menu, const int verbose, const unsigned int expert)
+static const char *ntfs_boot_sector_scan(disk_t *disk, const partition_t *partition, unsigned char *buffer_bs, unsigned char *buffer_backup_bs, unsigned int *menu, const int verbose, const unsigned int expert)
 {
   int identical_sectors;
   int opt_B=0;

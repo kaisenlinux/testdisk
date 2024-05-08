@@ -81,7 +81,7 @@ int check_sysv(disk_t *disk_car,partition_t *partition,const int verbose)
 
 static int test_sysv4(const disk_t *disk_car, const struct sysv4_super_block *sbd, const partition_t *partition, const int verbose)
 {
-  if (sbd->s_magic != (signed)le32(0xfd187e20) && sbd->s_magic != (signed)be32(0xfd187e20))
+  if ((unsigned)sbd->s_magic != le32(0xfd187e20) && (unsigned)sbd->s_magic != be32(0xfd187e20))
     return 1;
   if(verbose>0)
     log_info("\nSYSV4 Marker at %u/%u/%u\n",
@@ -91,7 +91,7 @@ static int test_sysv4(const disk_t *disk_car, const struct sysv4_super_block *sb
   return 0;
 }
 
-int recover_sysv(disk_t *disk_car,  const struct sysv4_super_block *sbd, partition_t *partition,const int verbose, const int dump_ind)
+int recover_sysv(const disk_t *disk_car,  const struct sysv4_super_block *sbd, partition_t *partition,const int verbose, const int dump_ind)
 {
   if(test_sysv4(disk_car, sbd,partition, verbose)!=0)
     return 1;
@@ -103,7 +103,7 @@ int recover_sysv(disk_t *disk_car,  const struct sysv4_super_block *sbd, partiti
       dump_log(sbd,sizeof(*sbd));
     }
   }
-  switch(sbd->s_magic)
+  switch((unsigned)sbd->s_magic)
   {
     case le32(0xfd187e20):
       partition->part_size = (uint64_t)le32(sbd->s_fsize)*(512<<(le32(sbd->s_type)-1));

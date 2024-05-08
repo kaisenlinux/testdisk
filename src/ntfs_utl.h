@@ -19,14 +19,25 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#ifndef _NTFS_UTL_H
+#define _NTFS_UTL_H
+
+#ifdef __FRAMAC__
+#undef HAVE_LIBNTFS
+#undef HAVE_LIBNTFS3G
+#endif
+
 #if defined(HAVE_LIBNTFS) || defined(HAVE_LIBNTFS3G)
 #ifdef __cplusplus
 extern "C" {
 #endif
+
 ATTR_RECORD * find_attribute(const ATTR_TYPES type, ntfs_attr_search_ctx *ctx);
 ATTR_RECORD * find_first_attribute(const ATTR_TYPES type, MFT_RECORD *mft);
 int utils_cluster_in_use(ntfs_volume *vol, long long lcn);
+
 #ifdef __cplusplus
 } /* closing brace for extern "C" */
+#endif
 #endif
 #endif

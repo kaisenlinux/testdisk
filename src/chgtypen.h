@@ -19,12 +19,21 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#ifndef _CHGTYPEN_H
+#define _CHGTYPEN_H
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/*@
+  @ requires \valid(disk);
+  @ requires valid_disk(disk);
+  @ requires \valid(partition);
+  @ requires \separated(disk, partition);
+  @*/
 void change_part_type_ncurses(const disk_t *disk, partition_t *partition);
 
 #ifdef __cplusplus
 } /* closing brace for extern "C" */
+#endif
 #endif

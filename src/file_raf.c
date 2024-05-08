@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_raf)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,6 +32,7 @@
 #include "common.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_raf(file_stat_t *file_stat);
 
 const file_hint_t file_hint_raf= {
@@ -42,7 +44,7 @@ const file_hint_t file_hint_raf= {
   .register_header_check=&register_header_check_raf
 };
 
-/* Documentation source: http://libopenraw.freedesktop.org/wiki/Fuji_RAF/ */
+/* Documentation source: https://libopenraw.pages.freedesktop.org/formats/raf/ */
 struct header_raf
 {
   char magic[16];
@@ -59,40 +61,56 @@ struct header_raf
   uint32_t cfa_size;
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires buffer_size >= sizeof(struct header_raf);
+  @ requires separation: \separated(&file_hint_raf, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_raf(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
-  /* Fuji */
-  uint64_t tmp;
   const struct header_raf *raf=(const struct header_raf *)buffer;
-  uint64_t size;
-  if((const uint32_t)be32(raf->jpg_offset)!=0 && (const uint32_t)be32(raf->jpg_offset)<sizeof(struct header_raf))
-    return 0;
-  if((const uint32_t)be32(raf->cfa_offset)!=0 && (const uint32_t)be32(raf->cfa_offset)<sizeof(struct header_raf))
-    return 0;
-  if((const uint32_t)be32(raf->cfa_header_offset)!=0 && (const uint32_t)be32(raf->cfa_header_offset)<sizeof(struct header_raf))
-    return 0;
-  size=(uint64_t)be32(raf->jpg_offset)+be32(raf->jpg_size);
-  tmp=(uint64_t)be32(raf->cfa_offset)+be32(raf->cfa_size);
-  if(size < tmp)
-    size=tmp;
-  tmp=(uint64_t)be32(raf->cfa_header_offset)+be32(raf->cfa_header_size);
-  if(size < tmp)
-    size=tmp;
+  /*@ assert \valid_read(raf); */
+  /* Fuji */
+  const unsigned int cfa_header_offset=be32(raf->cfa_header_offset);
+  const unsigned int cfa_header_size=be32(raf->cfa_header_size);
+  const unsigned int cfa_offset=be32(raf->cfa_offset);
+  const unsigned int cfa_size=be32(raf->cfa_size);
+  const unsigned int jpg_offset=be32(raf->jpg_offset);
+  const unsigned int jpg_size=be32(raf->jpg_size);
+  uint64_t size=0;
+  if(jpg_size > 0)
+  {
+    const uint64_t tmp=(uint64_t)jpg_offset + jpg_size;
+    if(jpg_offset<sizeof(struct header_raf))
+      return 0;
+    if(tmp > size)
+      size=tmp;
+  }
+  if(cfa_size > 0)
+  {
+    const uint64_t tmp=(uint64_t)cfa_offset + cfa_size;
+    if(cfa_offset<sizeof(struct header_raf))
+      return 0;
+    if(size < tmp)
+      size=tmp;
+  }
+  if(cfa_header_size > 0)
+  {
+    const uint64_t tmp=(uint64_t)cfa_header_offset + cfa_header_size;
+    if(cfa_header_offset<sizeof(struct header_raf))
+      return 0;
+    if(size < tmp)
+      size=tmp;
+  }
   if(size < sizeof(struct header_raf))
     return 0;
   reset_file_recovery(file_recovery_new);
   file_recovery_new->extension=file_hint_raf.extension;
   file_recovery_new->calculated_file_size=size;
-  if(raf->dir_version[0]=='0' && raf->dir_version[1]=='1')
-  {
-    file_recovery_new->data_check=&data_check_size;
-    file_recovery_new->file_check=&file_check_size;
-  }
-  else
-  {
-    /* The size is bigger than calculated_file_size */
-    file_recovery_new->file_check=&file_check_size_min;
-  }
+  /* The size is bigger than calculated_file_size */
+  file_recovery_new->file_check=&file_check_size_min;
   return 1;
 }
 
@@ -100,3 +118,4 @@ static void register_header_check_raf(file_stat_t *file_stat)
 {
   register_header_check(0, "FUJIFILMCCD-RAW ", 16, &header_check_raf, file_stat);
 }
+#endif

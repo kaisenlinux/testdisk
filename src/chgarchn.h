@@ -20,12 +20,20 @@
 
  */
 
+#ifndef _CHGARCHN_H
+#define _CHGARCHN_H
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#ifdef HAVE_NCURSES
+/*@
+  @ requires valid_disk(disk_car);
+  @*/
 int change_arch_type_ncurses(disk_t *disk_car, const int verbose);
+#endif
 
 #ifdef __cplusplus
 } /* closing brace for extern "C" */
+#endif
 #endif

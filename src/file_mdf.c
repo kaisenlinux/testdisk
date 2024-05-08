@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_mdf)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,8 +32,8 @@
 #include "filegen.h"
 
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_mdf(file_stat_t *file_stat);
-static int header_check_mdf(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
 
 const file_hint_t file_hint_mdf= {
   .extension="mdf",
@@ -43,13 +44,13 @@ const file_hint_t file_hint_mdf= {
   .register_header_check=&register_header_check_mdf
 };
 
-static const unsigned char mdf_header[4]= { 0x01, 0x0f, 0x00, 0x00 };
-
-static void register_header_check_mdf(file_stat_t *file_stat)
-{
-  register_header_check(0, mdf_header,sizeof(mdf_header), &header_check_mdf, file_stat);
-}
-
+/*@
+  @ requires buffer_size >= 0x1c;
+  @ requires separation: \separated(&file_hint_mdf, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_mdf(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   if(buffer[0x00]==0x01 && buffer[0x01]==0x0f && buffer[0x02]==0x00 && buffer[0x03]==0x00 &&
@@ -65,3 +66,10 @@ static int header_check_mdf(const unsigned char *buffer, const unsigned int buff
   }
   return 0;
 }
+
+static void register_header_check_mdf(file_stat_t *file_stat)
+{
+  static const unsigned char mdf_header[4]= { 0x01, 0x0f, 0x00, 0x00 };
+  register_header_check(0, mdf_header,sizeof(mdf_header), &header_check_mdf, file_stat);
+}
+#endif

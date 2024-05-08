@@ -19,13 +19,38 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+
+#ifndef _ASKLOC_H
+#define _ASKLOC_H
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-char *ask_location(const char*msg, const char *src_dir, const char *dst_org);
+#if defined(DISABLED_FOR_FRAMAC)
+#undef HAVE_NCURSES
+#endif
+
+/*@
+  @ requires \valid(buf + (0 .. size-1));
+  @ ensures  valid_string(buf);
+  @ ensures  \result == buf;
+  @*/
+char *td_getcwd(char *buf, unsigned long size);
+
+#ifdef HAVE_NCURSES
+/*@
+  @ requires \valid(dst + (0 .. dst_size-1));
+  @ requires valid_read_string(msg);
+  @ requires \separated(dst, msg, src_dir);
+  @ assigns  *(dst + (0 .. dst_size-1));
+  @*/
+void ask_location(char *dst, const unsigned int dst_size, const char *msg, const char *src_dir);
+#endif
+
+// ensures \result == \null || (\freeable(\result) && valid_string(\result));
 char *get_default_location(void);
 
 #ifdef __cplusplus
 } /* closing brace for extern "C" */
+#endif
 #endif

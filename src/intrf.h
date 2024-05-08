@@ -19,6 +19,8 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#ifndef _INTRF_H
+#define _INTRF_H
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -56,17 +58,56 @@ struct MenuItem
 /* '\014' == ^L */
 #define key_REDRAWKEY 		'\014'
 
+/*@
+  @ requires \valid_read(disk_car);
+  @ requires valid_disk(disk_car);
+  @*/
 void log_CHS_from_LBA(const disk_t *disk_car, const unsigned long int pos_LBA);
-const char *aff_part_aux(const unsigned int newline, const disk_t *disk_car, const partition_t *partition);
-void aff_part_buffer(const unsigned int newline,const disk_t *disk_car,const partition_t *partition);
 
+/*@
+  @ requires \valid_read(disk_car);
+  @ requires valid_disk(disk_car);
+  @ requires \valid_read(partition);
+  @ requires valid_partition(partition);
+  @ requires \separated(disk_car, partition);
+  @*/
+const char *aff_part_aux(const unsigned int newline, const disk_t *disk_car, const partition_t *partition);
+
+/*@
+  @ requires \valid_read(disk_car);
+  @ requires valid_disk(disk_car);
+  @ requires \valid_read(partition);
+  @ requires valid_partition(partition);
+  @ requires \separated(disk_car, partition);
+  @*/
+void aff_part_buffer(const unsigned int newline, const disk_t *disk_car, const partition_t *partition);
+
+/*@
+  @ requires valid_read_string(nptr);
+  @ assigns \nothing;
+  @*/
 uint64_t atouint64(const char *nptr);
+
+/*@
+  @ requires \valid(current_cmd);
+  @ requires valid_read_string(*current_cmd);
+  @ ensures  valid_read_string(*current_cmd);
+  @ assigns  *current_cmd;
+  @*/
 uint64_t ask_number_cli(char **current_cmd, const uint64_t val_cur, const uint64_t val_min, const uint64_t val_max, const char * _format, ...) __attribute__ ((format (printf, 5, 6)));
 void screen_buffer_reset(void);
 int screen_buffer_add(const char *_format, ...)  __attribute__ ((format (printf, 1, 2)));
 void screen_buffer_to_log(void);
+
+/*@
+  @ requires \valid_read(partition);
+  @ requires valid_partition(partition);
+  @ terminates \true;
+  @ assigns \nothing;
+  @*/
 int get_partition_status(const partition_t *partition);
 
 #ifdef __cplusplus
 } /* closing brace for extern "C" */
+#endif
 #endif

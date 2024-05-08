@@ -19,13 +19,22 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#ifndef _PNEXT_H
+#define _PNEXT_H
 
 /* #define DEBUG_GET_NEXT_SECTOR */
+/*@
+  @ requires \valid_read(list_search_space);
+  @ requires \valid(current_search_space);
+  @ requires \valid(offset);
+  @ requires \separated(list_search_space, current_search_space, offset);
+  @ assigns  *current_search_space, *offset;
+  @*/
 static
 #ifndef DEBUG_GET_NEXT_SECTOR
 inline
 #endif
-void get_next_header(alloc_data_t *list_search_space, alloc_data_t **current_search_space, uint64_t *offset)
+void get_next_header(const alloc_data_t *list_search_space, alloc_data_t **current_search_space, uint64_t *offset)
 {
 #ifdef DEBUG_GET_NEXT_SECTOR
   log_trace(" get_next_header %llu (%llu-%llu)\n",
@@ -38,11 +47,18 @@ void get_next_header(alloc_data_t *list_search_space, alloc_data_t **current_sea
   *offset=(*current_search_space)->start;
 }
 
+/*@
+  @ requires \valid_read(list_search_space);
+  @ requires \valid(current_search_space);
+  @ requires \valid(offset);
+  @ requires \separated(list_search_space, current_search_space, offset);
+  @ assigns  *current_search_space, *offset;
+  @*/
 static
 #ifndef DEBUG_GET_NEXT_SECTOR
 inline
 #endif
-void get_next_sector(alloc_data_t *list_search_space, alloc_data_t **current_search_space, uint64_t *offset, const unsigned int blocksize)
+void get_next_sector(const alloc_data_t *list_search_space, alloc_data_t **current_search_space, uint64_t *offset, const unsigned int blocksize)
 {
 #ifdef DEBUG_GET_NEXT_SECTOR
   log_debug(" get_next_sector %llu (%llu-%llu)\n",
@@ -72,14 +88,28 @@ void get_next_sector(alloc_data_t *list_search_space, alloc_data_t **current_sea
     get_next_header(list_search_space, current_search_space, offset);
 }
 
-static inline void get_prev_header(alloc_data_t *list_search_space, alloc_data_t **current_search_space, uint64_t *offset, const unsigned int blocksize)
+/*@
+  @ requires \valid_read(list_search_space);
+  @ requires \valid(current_search_space);
+  @ requires \valid(offset);
+  @ requires \separated(list_search_space, current_search_space, offset);
+  @ assigns  *current_search_space, *offset;
+  @*/
+static inline void get_prev_header(const alloc_data_t *list_search_space, alloc_data_t **current_search_space, uint64_t *offset, const unsigned int blocksize)
 {
   if((*current_search_space) != list_search_space)
     *current_search_space=td_list_entry((*current_search_space)->list.prev, alloc_data_t, list);
   *offset=(*current_search_space)->end + 1 - blocksize;
 }
 
-static inline void get_prev_sector(alloc_data_t *list_search_space, alloc_data_t **current_search_space, uint64_t *offset, const unsigned int blocksize)
+/*@
+  @ requires \valid_read(list_search_space);
+  @ requires \valid(current_search_space);
+  @ requires \valid(offset);
+  @ requires \separated(list_search_space, current_search_space, offset);
+  @ assigns  *current_search_space, *offset;
+  @*/
+static inline void get_prev_sector(const alloc_data_t *list_search_space, alloc_data_t **current_search_space, uint64_t *offset, const unsigned int blocksize)
 {
   if((*current_search_space) == list_search_space)
   {
@@ -90,3 +120,4 @@ static inline void get_prev_sector(alloc_data_t *list_search_space, alloc_data_t
   else
     get_prev_header(list_search_space, current_search_space, offset, blocksize);
 }
+#endif

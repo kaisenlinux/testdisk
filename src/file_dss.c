@@ -19,6 +19,7 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_dss)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -33,16 +34,16 @@
 #include "types.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_dss(file_stat_t *file_stat);
-static int header_check_dss(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
 
-const file_hint_t file_hint_dss= {
-  .extension="dss",
-  .description="Digital Speech Standard",
-  .max_filesize=PHOTOREC_MAX_FILE_SIZE,
-  .recover=1,
-  .enable_by_default=1,
-  .register_header_check=&register_header_check_dss
+const file_hint_t file_hint_dss = {
+  .extension = "dss",
+  .description = "Digital Speech Standard",
+  .max_filesize = PHOTOREC_MAX_FILE_SIZE,
+  .recover = 1,
+  .enable_by_default = 1,
+  .register_header_check = &register_header_check_dss
 };
 
 /* 
@@ -58,23 +59,36 @@ const file_hint_t file_hint_dss= {
    Filesize is always a multiple of 512
 */
 
+/*@
+  @ requires buffer_size >= 0x26+24;
+  @ requires separation: \separated(&file_hint_dss, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_dss(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
-  const char *date_asc=(const char *)&buffer[0x26];
+  const unsigned char *udate_asc = (const unsigned char *)&buffer[0x26];
+  const char *date_asc = (const char *)&buffer[0x26];
   unsigned int i;
-  for(i=0; i<24; i++)
-    if(!isdigit(date_asc[i]))
+  /*@
+    @ loop assigns i;
+    @ loop variant 24 - i;
+    @*/
+  for(i = 0; i < 24; i++)
+    if(!isdigit(udate_asc[i]))
       return 0;
   reset_file_recovery(file_recovery_new);
-  file_recovery_new->extension=file_hint_dss.extension;
+  file_recovery_new->extension = file_hint_dss.extension;
   /* File should be big enough to hold the comments */
-  file_recovery_new->min_filesize=100+0x31E;
-  file_recovery_new->time=get_time_from_YYMMDDHHMMSS(date_asc);
+  file_recovery_new->min_filesize = 1024;
+  file_recovery_new->time = get_time_from_YYMMDDHHMMSS(date_asc);
   return 1;
 }
 
 static void register_header_check_dss(file_stat_t *file_stat)
 {
-  static const unsigned char dss_header[4]= { 0x02, 'd','s','s'};
-  register_header_check(0, dss_header,sizeof(dss_header), &header_check_dss, file_stat);
+  static const unsigned char dss_header[4] = { 0x02, 'd', 's', 's' };
+  register_header_check(0, dss_header, sizeof(dss_header), &header_check_dss, file_stat);
 }
+#endif

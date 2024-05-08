@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_cab)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,6 +32,7 @@
 #include "common.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_cab(file_stat_t *file_stat);
 
 const file_hint_t file_hint_cab= {
@@ -57,14 +59,22 @@ struct cab_header {
   uint16_t number;
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires buffer_size >= sizeof(struct cab_header) ;
+  @ requires separation: \separated(&file_hint_cab, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_cab(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct cab_header *cab_hdr=(const struct cab_header*)buffer;
-  if(le16(cab_hdr->cab_version)==0x0103 && le32(cab_hdr->filesize) >= sizeof(struct cab_header))
+  const unsigned int filesize=le32(cab_hdr->filesize);
+  if(le16(cab_hdr->cab_version)==0x0103 && filesize >= sizeof(struct cab_header))
   {
     reset_file_recovery(file_recovery_new);
     file_recovery_new->extension=file_hint_cab.extension;
-    file_recovery_new->calculated_file_size=(uint64_t)le32(cab_hdr->filesize);
+    file_recovery_new->calculated_file_size=filesize;
     file_recovery_new->data_check=&data_check_size;
     file_recovery_new->file_check=&file_check_size;
     return 1;
@@ -77,3 +87,4 @@ static void register_header_check_cab(file_stat_t *file_stat)
   static const unsigned char cab_header[4]  = { 'M','S','C','F'};
   register_header_check(0, cab_header,sizeof(cab_header), &header_check_cab, file_stat);
 }
+#endif

@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_mlv)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,7 +32,11 @@
 #include "filegen.h"
 #include "common.h"
 #include "log.h"
+#if defined(__FRAMAC__)
+#include "__fc_builtin.h"
+#endif
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_mlv(file_stat_t *file_stat);
 
 const file_hint_t file_hint_mlv= {
@@ -66,9 +71,18 @@ typedef struct {
   uint64_t    timestamp;
 } __attribute__ ((gcc_struct, __packed__)) mlv_hdr_t;
 
+/*@
+  @ requires \valid_read(hdr->blockType + (0 .. 3));
+  @ terminates \true;
+  @ assigns \nothing;
+  @*/
 static int is_valid_type(const mlv_hdr_t *hdr)
 {
   unsigned int i;
+  /*@
+    @ loop assigns i;
+    @ loop variant 4 - i;
+    @*/
   for(i=0; i<4; i++)
   {
     const uint8_t c=hdr->blockType[i];
@@ -78,57 +92,114 @@ static int is_valid_type(const mlv_hdr_t *hdr)
   return 1;
 }
 
+/*@
+  @ requires fr->data_check==&data_check_mlv;
+  @ requires valid_data_check_param(buffer, buffer_size, fr);
+  @ terminates \true;
+  @ ensures  valid_data_check_result(\result, fr);
+  @ assigns fr->calculated_file_size;
+  @*/
 static data_check_t data_check_mlv(const unsigned char *buffer, const unsigned int buffer_size, file_recovery_t *fr)
 {
+  /*@ assert fr->calculated_file_size <= PHOTOREC_MAX_FILE_SIZE; */
+  /*@ assert fr->file_size <= PHOTOREC_MAX_FILE_SIZE; */
+  /*@
+    @ loop assigns fr->calculated_file_size;
+    @ loop variant fr->file_size + buffer_size/2 - (fr->calculated_file_size + 8);
+    @*/
   while(fr->calculated_file_size + buffer_size/2  >= fr->file_size &&
       fr->calculated_file_size + 8 < fr->file_size + buffer_size/2)
   {
-    const unsigned int i=fr->calculated_file_size - fr->file_size + buffer_size/2;
+    const unsigned int i=fr->calculated_file_size + buffer_size/2 - fr->file_size;
+    /*@ assert 0 <= i < buffer_size - 8; */
     const mlv_hdr_t *hdr=(const mlv_hdr_t *)&buffer[i];
     if(le32(hdr->blockSize)<0x10 || !is_valid_type(hdr))
       return DC_STOP;
     fr->calculated_file_size+=le32(hdr->blockSize);
   }
+  if(fr->calculated_file_size >= PHOTOREC_MAX_FILE_SIZE)
+    return DC_STOP;
   return DC_CONTINUE;
 }
 
+/*@
+  @ requires file_recovery->file_check == &file_check_mlv;
+  @ requires valid_file_check_param(file_recovery);
+  @ ensures  valid_file_check_result(file_recovery);
+  @ assigns *file_recovery->handle, errno, file_recovery->file_size;
+  @ assigns Frama_C_entropy_source;
+  @*/
 static void file_check_mlv(file_recovery_t *file_recovery)
 {
-  mlv_hdr_t hdr;
   uint64_t fs=0;
-  do
+  /*@
+    @ loop assigns *file_recovery->handle, errno, file_recovery->file_size;
+    @ loop assigns Frama_C_entropy_source, fs;
+    @ loop variant 0x8000000000000000 - fs;
+    @*/
+  while(fs < 0x8000000000000000)
   {
+    char buffer[sizeof(mlv_hdr_t)];
+    const mlv_hdr_t *hdr=(const mlv_hdr_t *)&buffer;
     if(my_fseek(file_recovery->handle, fs, SEEK_SET)<0 ||
-	fread(&hdr, sizeof(hdr), 1, file_recovery->handle)!=1 ||
-	le32(hdr.blockSize)<0x10 ||
-	!is_valid_type(&hdr) ||
-	fs + le32(hdr.blockSize) > file_recovery->file_size)
+	fread(&buffer, sizeof(buffer), 1, file_recovery->handle)!=1)
     {
       file_recovery->file_size=(fs <= file_recovery->blocksize ? 0 : fs);
       return;
     }
-    fs+=le32(hdr.blockSize);
-  } while(1);
+#if defined(__FRAMAC__)
+    Frama_C_make_unknown(&buffer, sizeof(buffer));
+#endif
+    if(le32(hdr->blockSize)<0x10 ||
+	!is_valid_type(hdr) ||
+	fs + le32(hdr->blockSize) > file_recovery->file_size)
+    {
+      file_recovery->file_size=(fs <= file_recovery->blocksize ? 0 : fs);
+      return;
+    }
+    fs+=le32(hdr->blockSize);
+  }
+  file_recovery->file_size=0;
 }
 
+/*@
+  @ requires file_recovery->file_rename == &file_rename_mlv;
+  @ requires valid_file_rename_param(file_recovery);
+  @ ensures  valid_file_rename_result(file_recovery);
+  @*/
 static void file_rename_mlv(file_recovery_t *file_recovery)
 {
   FILE *file;
-  mlv_file_hdr_t hdr;
+  char buffer[sizeof(mlv_file_hdr_t)];
+  const mlv_file_hdr_t *hdr=(const mlv_file_hdr_t *)&buffer;
   char ext[16];
+  const char *ext_ptr=(const char *)&ext;
+  /*@ assert \separated(file_recovery, ext_ptr); */
   if((file=fopen(file_recovery->filename, "rb"))==NULL)
     return;
   if(my_fseek(file, 0, SEEK_SET) < 0 ||
-      fread(&hdr, sizeof(hdr), 1, file) != 1)
+      fread(&buffer, sizeof(buffer), 1, file) != 1)
   {
     fclose(file);
     return ;
   }
   fclose(file);
-  sprintf(ext, "M%02u", le16(hdr.fileNum));
-  file_rename(file_recovery, NULL, 0, 0, ext, 1);
+  sprintf(ext, "M%02u", le16(hdr->fileNum));
+#if defined(DISABLED_FOR_FRAMAC)
+  ext[sizeof(ext)-1]='\0';
+#endif
+  /*@ assert valid_read_string(ext_ptr); */
+  file_rename(file_recovery, NULL, 0, 0, ext_ptr, 1);
 }
 
+/*@
+  @ requires buffer_size >= sizeof(mlv_file_hdr_t);
+  @ requires separation: \separated(&file_hint_mlv, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ terminates \true;
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_mlv(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const mlv_file_hdr_t *hdr=(const mlv_file_hdr_t *)buffer;
@@ -163,3 +234,4 @@ static void register_header_check_mlv(file_stat_t *file_stat)
 {
   register_header_check(0, "MLVI", 4, &header_check_mlv, file_stat);
 }
+#endif

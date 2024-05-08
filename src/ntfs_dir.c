@@ -26,6 +26,12 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
+
+#if defined(DISABLED_FOR_FRAMAC)
+#undef HAVE_LIBNTFS
+#undef HAVE_LIBNTFS3G
+#undef HAVE_SYS_PARAM_H
+#endif
  
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
@@ -43,7 +49,7 @@
 #ifdef HAVE_ERRNO_H
 #include <errno.h>
 #endif
-#ifdef HAVE_SYS_PARAM_H
+#if defined(HAVE_SYS_PARAM_H)
 #include <sys/param.h>
 #endif
 #ifdef HAVE_MACHINE_ENDIAN_H
@@ -56,21 +62,20 @@
 #include <stdarg.h>
 #include "types.h"
 
-#ifdef HAVE_LIBNTFS
+#if defined(HAVE_LIBNTFS)
 #include <ntfs/volume.h>
 #include <ntfs/attrib.h>
 #ifdef HAVE_NTFS_VERSION_H
 #include <ntfs/version.h>
 #endif
 #endif
-#ifdef HAVE_LIBNTFS3G
+#if defined(HAVE_LIBNTFS3G)
 #include <ntfs-3g/volume.h>
 #include <ntfs-3g/attrib.h>
 #endif
 
 #include "common.h"
 #include "intrf.h"
-#include "ntfs.h"
 #include "list.h"
 #include "list_sort.h"
 #include "dir.h"
@@ -107,7 +112,7 @@ static int ntfs_td_list_entry(  struct ntfs_dir_struct *ls, const ntfschar *name
 		const int name_len, const int name_type, const s64 pos,
 		const MFT_REF mref, const unsigned dt_type);
 static int ntfs_dir(disk_t *disk_car, const partition_t *partition, dir_data_t *dir_data, const unsigned long int cluster, file_info_t *dir_list);
-static int ntfs_copy(disk_t *disk_car, const partition_t *partition, dir_data_t *dir_data, const file_info_t *file);
+static copy_file_t ntfs_copy(disk_t *disk_car, const partition_t *partition, dir_data_t *dir_data, const file_info_t *file);
 static void dir_partition_ntfs_close(dir_data_t *dir_data);
 
 /**
@@ -331,15 +336,16 @@ static int ntfs_dir(disk_t *disk_car, const partition_t *partition, dir_data_t *
 
 enum { bufsize = 4096 };
 
-static int ntfs_copy(disk_t *disk_car, const partition_t *partition, dir_data_t *dir_data, const file_info_t *file)
+static copy_file_t ntfs_copy(disk_t *disk_car, const partition_t *partition, dir_data_t *dir_data, const file_info_t *file)
 {
   const unsigned long int first_inode=file->st_ino;
   ntfs_inode *inode;
   struct ntfs_dir_struct *ls=(struct ntfs_dir_struct*)dir_data->private_dir_data;
+  copy_file_t res=CP_OK;
   inode = ntfs_inode_open (ls->vol, first_inode);
   if (!inode) {
     log_error("ntfs_copy: ntfs_inode_open failed for %s\n", dir_data->current_directory);
-    return -1;
+    return CP_STAT_FAILED;
   }
   {
     char *buffer;
@@ -353,7 +359,7 @@ static int ntfs_copy(disk_t *disk_car, const partition_t *partition, dir_data_t 
     if (!buffer)
     {
       ntfs_inode_close(inode);
-      return -2;
+      return CP_NOMEM;
     }
     stream_name=strrchr(dir_data->current_directory, ':');
     if(stream_name)
@@ -378,7 +384,7 @@ static int ntfs_copy(disk_t *disk_car, const partition_t *partition, dir_data_t 
       log_error("Cannot find attribute type 0x%lx.\n", (long) AT_DATA);
       free(buffer);
       ntfs_inode_close(inode);
-      return -3;
+      return CP_STAT_FAILED;
     }
     if ((inode->mft_no < 2) && (attr->type == AT_DATA))
       block_size = ls->vol->mft_record_size;
@@ -407,7 +413,7 @@ static int ntfs_copy(disk_t *disk_car, const partition_t *partition, dir_data_t 
       ntfs_attr_close(attr);
       free(buffer);
       ntfs_inode_close(inode);
-      return -4;
+      return CP_CREATE_FAILED;
     }
     offset = 0;
     for (;;)
@@ -423,6 +429,7 @@ static int ntfs_copy(disk_t *disk_car, const partition_t *partition, dir_data_t 
       //ntfs_log_info("read %lld bytes\n", bytes_read);
       if (bytes_read < 0) {
 	log_error("ERROR: Couldn't read file");
+	res=CP_READ_FAILED;
 	break;
       }
       if (!bytes_read)
@@ -432,6 +439,7 @@ static int ntfs_copy(disk_t *disk_car, const partition_t *partition, dir_data_t 
       if (written != bytes_read)
       {
 	log_error("ERROR: Couldn't output all data!");
+	res=CP_NOSPACE;
 	break;
       }
       offset += bytes_read;
@@ -444,7 +452,7 @@ static int ntfs_copy(disk_t *disk_car, const partition_t *partition, dir_data_t 
   }
   /* Finished with the inode; release it. */
   ntfs_inode_close(inode);
-  return 0;
+  return res;
 }
 
 static void dir_partition_ntfs_close(dir_data_t *dir_data)

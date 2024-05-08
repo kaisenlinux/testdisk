@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_compress)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -30,6 +31,7 @@
 #include "types.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_compress(file_stat_t *file_stat);
 
 const file_hint_t file_hint_compress= {
@@ -41,6 +43,12 @@ const file_hint_t file_hint_compress= {
   .register_header_check=&register_header_check_compress
 };
 
+/*@
+  @ requires separation: \separated(&file_hint_compress, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_compress(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   reset_file_recovery(file_recovery_new);
@@ -53,3 +61,4 @@ static void register_header_check_compress(file_stat_t *file_stat)
   static const unsigned char compress_header[9]	= {'S', 'Z', 'D', 'D', 0x88, 0xf0, 0x27, 0x33, 'A'};
   register_header_check(0, compress_header, sizeof(compress_header), &header_check_compress, file_stat);
 }
+#endif

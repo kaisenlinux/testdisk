@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_7z)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,6 +32,7 @@
 #include "filegen.h"
 #include "common.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_7z(file_stat_t *file_stat);
 
 const file_hint_t file_hint_7z= {
@@ -52,11 +54,21 @@ struct header_7z {
   uint64_t nextHeaderCRC;
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires buffer_size >= sizeof(struct header_7z);
+  @ requires separation: \separated(&file_hint_7z, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_7z(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery,  file_recovery_t *file_recovery_new)
 {
   const struct header_7z *buffer_7z=(const struct header_7z *)buffer;
   if(buffer_7z->majorversion!=0 ||
       le64(buffer_7z->nextHeaderSize)==0)
+    return 0;
+  if( le64(buffer_7z->nextHeaderOffset) > 0x7000000000000000 ||
+      le64(buffer_7z->nextHeaderSize)   > 0x7000000000000000)
     return 0;
   reset_file_recovery(file_recovery_new);
   file_recovery_new->extension=file_hint_7z.extension;
@@ -74,3 +86,4 @@ static void register_header_check_7z(file_stat_t *file_stat)
   static const unsigned char header_7z[6]  = {'7','z', 0xbc, 0xaf, 0x27, 0x1c};
   register_header_check(0, header_7z, sizeof(header_7z), &header_check_7z, file_stat);
 }
+#endif

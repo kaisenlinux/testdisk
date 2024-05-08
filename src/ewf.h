@@ -19,15 +19,27 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#ifndef _EWF_H
+#define _EWF_H
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#if defined(DISABLED_FOR_FRAMAC)
+#undef HAVE_LIBEWF
+#endif
+
 #if defined(HAVE_LIBEWF_H) && defined(HAVE_LIBEWF)
+/*@
+  @ requires valid_read_string(device);
+  @ ensures  valid_disk(\result);
+  @*/
 disk_t *fewf_init(const char *device, const int testdisk_mode);
 #endif
+/*@ assigns \nothing; */
 const char*td_ewf_version(void);
 
 #ifdef __cplusplus
 } /* closing brace for extern "C" */
+#endif
 #endif

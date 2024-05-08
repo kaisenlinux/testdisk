@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_fs)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -33,8 +34,8 @@
 #include "common.h"
 #include "log.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_fs(file_stat_t *file_stat);
-static int header_check_fs(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
 
 const file_hint_t file_hint_fs= {
   .extension="fs",
@@ -56,17 +57,33 @@ struct transaction_header
   uint16_t len_ext;
 } __attribute__ ((gcc_struct, __packed__));
 
+/*@
+  @ requires file_recovery->data_check==&data_check_fs;
+  @ requires valid_data_check_param(buffer, buffer_size, file_recovery);
+  @ terminates \true;
+  @ ensures  valid_data_check_result(\result, file_recovery);
+  @ assigns file_recovery->calculated_file_size;
+  @*/
 static data_check_t data_check_fs(const unsigned char *buffer, const unsigned int buffer_size, file_recovery_t *file_recovery)
 {
+  /*@ assert file_recovery->calculated_file_size <= PHOTOREC_MAX_FILE_SIZE; */
+  /*@ assert file_recovery->file_size <= PHOTOREC_MAX_FILE_SIZE; */
+  /*@
+    @ loop assigns file_recovery->calculated_file_size;
+    @ loop variant file_recovery->file_size + buffer_size/2 - (file_recovery->calculated_file_size + 0x11);
+    @*/
   while(file_recovery->calculated_file_size + buffer_size/2  >= file_recovery->file_size &&
       file_recovery->calculated_file_size + 0x11 < file_recovery->file_size + buffer_size/2)
   {
-    const unsigned int i=file_recovery->calculated_file_size - file_recovery->file_size + buffer_size/2;
+    const unsigned int i=file_recovery->calculated_file_size + buffer_size/2 - file_recovery->file_size;
+    /*@ assert 0 <= i < buffer_size - 0x11; */
     const struct transaction_header *hdr=(const struct transaction_header *)&buffer[i];
     const uint64_t len=be64(hdr->len);
     if(len < sizeof(struct transaction_header)-8)
       return DC_STOP;
     if(hdr->status!=' ' && hdr->status!='p' && hdr->status!='c' &&  hdr->status!='u')
+      return DC_STOP;
+    if(len > PHOTOREC_MAX_FILE_SIZE)
       return DC_STOP;
 #ifdef DEBUG_FS
     log_info("0x%08llx len=%llu status=%c\n", (long long unsigned)file_recovery->calculated_file_size, (long long unsigned)len, hdr->status);
@@ -79,6 +96,14 @@ static data_check_t data_check_fs(const unsigned char *buffer, const unsigned in
   return DC_CONTINUE;
 }
 
+/*@
+  @ requires buffer_size >= sizeof(struct transaction_header);
+  @ requires separation: \separated(&file_hint_fs, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ terminates \true;
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_fs(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const struct transaction_header *hdr=(const struct transaction_header *)&buffer[4];
@@ -102,3 +127,4 @@ static void register_header_check_fs(file_stat_t *file_stat)
   static const unsigned char fs_header[4]={ 'F', 'S','2','1' };
   register_header_check(0, fs_header,sizeof(fs_header), &header_check_fs, file_stat);
 }
+#endif

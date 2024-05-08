@@ -19,6 +19,7 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_fp7)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -29,8 +30,8 @@
 #include "types.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_fp7(file_stat_t *file_stat);
-static int header_check_fp7(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
 
 const file_hint_t file_hint_fp7= {
   .extension="fp7",
@@ -41,11 +42,22 @@ const file_hint_t file_hint_fp7= {
   .register_header_check=&register_header_check_fp7
 };
 
+/*@
+  @ requires valid_file_check_param(file_recovery);
+  @ ensures  valid_file_check_result(file_recovery);
+  @ assigns  file_recovery->file_size;
+  @*/
 static void file_check_fp7(file_recovery_t *file_recovery)
 {
   file_recovery->file_size=file_recovery->file_size/4096*4096;
 }
 
+/*@
+  @ requires separation: \separated(&file_hint_fp7, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_fp7(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   if(buffer_size < 0x230 || memcmp(&buffer[0x20d], "HBAM", 4)!=0)
@@ -54,7 +66,7 @@ static int header_check_fp7(const unsigned char *buffer, const unsigned int buff
   file_recovery_new->min_filesize=4096;
   file_recovery_new->file_check=&file_check_fp7;
   if(memcmp(&buffer[0x21e], "Pro 12", 6)==0)
-    file_recovery_new->extension="fp12";
+    file_recovery_new->extension="fmp12";
   else
     file_recovery_new->extension=file_hint_fp7.extension;
   return 1;
@@ -69,3 +81,4 @@ static void register_header_check_fp7(file_stat_t *file_stat)
   };
   register_header_check(0, fp7_header,sizeof(fp7_header), &header_check_fp7, file_stat);
 }
+#endif

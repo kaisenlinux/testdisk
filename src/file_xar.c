@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_xar)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,15 +32,16 @@
 #include "filegen.h"
 #include "common.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_xar(file_stat_t *file_stat);
 
-const file_hint_t file_hint_xar= {
-  .extension="xar",
-  .description="xar archive",
-  .max_filesize=PHOTOREC_MAX_FILE_SIZE,
-  .recover=1,
-  .enable_by_default=1,
-  .register_header_check=&register_header_check_xar
+const file_hint_t file_hint_xar = {
+  .extension = "xar",
+  .description = "xar archive",
+  .max_filesize = PHOTOREC_MAX_FILE_SIZE,
+  .recover = 1,
+  .enable_by_default = 1,
+  .register_header_check = &register_header_check_xar
 };
 
 struct xar_header
@@ -55,20 +57,32 @@ struct xar_header
    */
 };
 
+/*@
+  @ requires buffer_size >= sizeof(struct xar_header);
+  @ requires separation: \separated(&file_hint_xar, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_xar(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
-  const struct xar_header *hdr=(const struct xar_header *)buffer;
-  if(be16(hdr->version) > 1)
+  const struct xar_header *hdr = (const struct xar_header *)buffer;
+  const unsigned int cksum_alg = be32(hdr->cksum_alg);
+  const unsigned int hdr_size = be16(hdr->size);
+  const uint64_t size = be64(hdr->toc_length_compressed);
+  if(be16(hdr->version) != 1)
     return 0;
-  if(be16(hdr->size) < 28)
+  if(hdr_size < 28)
     return 0;
-  if(be16(hdr->cksum_alg)==3 && (be16(hdr->size) <32 ||be16(hdr->size)%4!=0))
+  if(cksum_alg == 3 && (hdr_size < 32 || hdr_size % 4 != 0))
     return 0;
-  if(be16(hdr->cksum_alg)>3)
+  if(cksum_alg > 4)
+    return 0;
+  if(size >= PHOTOREC_MAX_FILE_SIZE)
     return 0;
   reset_file_recovery(file_recovery_new);
-  file_recovery_new->extension=file_hint_xar.extension;
-  file_recovery_new->min_filesize=be16(hdr->size) + be64(hdr->toc_length_compressed);
+  file_recovery_new->extension = file_hint_xar.extension;
+  file_recovery_new->min_filesize = (uint64_t)hdr_size + size;
   return 1;
 }
 
@@ -76,3 +90,4 @@ static void register_header_check_xar(file_stat_t *file_stat)
 {
   register_header_check(0, "xar!", 4, &header_check_xar, file_stat);
 }
+#endif

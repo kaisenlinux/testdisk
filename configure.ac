@@ -2,11 +2,11 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.59])
-AC_INIT([testdisk],[7.1],[grenier@cgsecurity.org])
+AC_INIT([testdisk],[7.2],[grenier@cgsecurity.org])
 AC_LANG(C)
 sinclude(acx_pthread.m4)
 sinclude(mkdir.m4)
-TESTDISKDATE="July 2019"
+TESTDISKDATE="February 2024"
 AC_SUBST(TESTDISKDATE)
 AC_DEFINE_UNQUOTED([TESTDISKDATE],"$TESTDISKDATE",[Date of release])
 AC_CONFIG_AUX_DIR(config)
@@ -213,15 +213,6 @@ AC_ARG_ENABLE([qt],
      esac],
      [use_qt=true])
 
-AC_ARG_ENABLE([ncmouse],
-    AS_HELP_STRING([--enable-ncmouse],[enable use of mouse in ncurses(default is NO)]),
-    [case "${enableval}" in
-       yes) use_ncmouse=true ;;
-       no)  use_ncmouse=false ;;
-       *) AC_MSG_ERROR([bad value ${enableval} for --enable-mouse]) ;;
-     esac],
-     [use_ncmouse=false])
-
 AC_ARG_ENABLE([dfxml],
     AS_HELP_STRING([--disable-dfxml]),
     [case "${enableval}" in
@@ -339,7 +330,7 @@ AC_SYS_LARGEFILE
 AC_HEADER_STDC
 #AC_CHECK_HEADERS([sys/types.h sys/stat.h stdlib.h stdint.h unistd.h])
 AC_HEADER_SYS_WAIT
-AC_CHECK_HEADERS([byteswap.h curses.h cygwin/fs.h cygwin/version.h dal/file_dal.h dal/file.h ddk/ntddstor.h dirent.h endian.h errno.h fcntl.h features.h giconv.h glob.h iconv.h io.h libgen.h limits.h linux/fs.h linux/hdreg.h linux/types.h locale.h machine/endian.h malloc.h ncurses.h ncurses/curses.h ncurses/ncurses.h ncursesw/curses.h ncursesw/ncurses.h ntfs/version.h pwd.h scsi/scsi.h scsi/scsi_ioctl.h scsi/sg.h setjmp.h signal.h stdarg.h sys/cygwin.h sys/disk.h sys/disklabel.h sys/dkio.h sys/endian.h sys/ioctl.h sys/param.h sys/select.h sys/time.h sys/utsname.h sys/vtoc.h time.h utime.h w32api/ddk/ntdddisk.h windef.h windows.h zlib.h])
+AC_CHECK_HEADERS([byteswap.h curses.h cygwin/fs.h cygwin/version.h dal/file_dal.h dal/file.h ddk/ntddstor.h dirent.h endian.h errno.h fcntl.h features.h giconv.h glob.h iconv.h io.h libgen.h limits.h linux/fs.h linux/hdreg.h linux/types.h locale.h machine/endian.h malloc.h ncurses.h ncurses/curses.h ncurses/ncurses.h ncursesw/curses.h ncursesw/ncurses.h ntfs/version.h pwd.h scsi/scsi.h scsi/scsi_ioctl.h scsi/sg.h setjmp.h signal.h stdarg.h sys/cygwin.h sys/disk.h sys/disklabel.h sys/dkio.h sys/endian.h sys/ioctl.h sys/sysmacros.h sys/param.h sys/select.h sys/time.h sys/utsname.h sys/vtoc.h time.h utime.h w32api/ddk/ntdddisk.h windef.h windows.h zlib.h])
 
 #--------------------------------------------------------------------
 # Check for iconv support (for Unicode conversion).
@@ -570,17 +561,6 @@ if test "x$with_ncurses" != "xno"; then
      photorec_LDADD="$photorec_LDADD -l${tinfo_lib}"
    fi
  fi
-  if test "$use_ncmouse" = "true";
-  then
-    ac_save_LIBS="$LIBS"
-    LIBS="$LIBS $photorec_LDADD"
-    AC_CHECK_FUNCS(mousemask)
-    LIBS="$ac_save_LIBS"
-    if test "$ac_cv_func_mousemask" = "yes";
-    then
-      AC_DEFINE([ENABLE_MOUSE],1,[Define to 1 if the ncurses mouse interface is enabled])
-    fi
-  fi
   ac_save_LIBS="$LIBS"
   LIBS="$LIBS $photorec_LDADD"
   AC_CHECK_FUNCS([assume_default_colors])
@@ -591,12 +571,19 @@ fi
 
 if test "x$use_ext2fs" != "xno"; then
 if test "x$with_ext2fs" != "xno"; then
+  ac_save_LIBS="$LIBS"
   AC_CHECK_LIB(com_err,com_err,[
       AC_DEFINE([HAVE_LIBCOMM_ERR],1,[Define to 1 if you have the com_err library (-lcom_err).])
       if test "${com_err_lib_a}" = ""; then
-        LIBS="-lcom_err $LIBS"
+	LIBS="-lcom_err $LIBS"
+        photorec_LDADD="-lcom_err $photorec_LDADD"
+        qphotorec_LDADD="-lcom_err $qphotorec_LDADD"
+        testdisk_LDADD="-lcom_err $testdisk_LDADD"
       else
-        LIBS="${com_err_lib_a} $LIBS"
+	LIBS="${com_err_lib_a} $LIBS"
+        photorec_LDADD="${com_err_lib_a} $photorec_LDADD"
+        qphotorec_LDADD="${com_err_lib_a} $qphotorec_LDADD"
+        testdisk_LDADD="${com_err_lib_a} $testdisk_LDADD"
       fi
       have_com_err=yes
       ], AC_MSG_WARN(No com_err library detected))
@@ -604,13 +591,20 @@ if test "x$with_ext2fs" != "xno"; then
   AC_CHECK_LIB(ext2fs,ext2fs_open,[
       AC_DEFINE([HAVE_LIBEXT2FS],1,[Define to 1 if you have the ext2fs library (-lext2fs).])
       if test "${ext2fs_lib_a}" = ""; then
-        LIBS="-lext2fs $LIBS"
+	LIBS="-lext2fs $LIBS"
+        photorec_LDADD="-lext2fs $photorec_LDADD"
+        qphotorec_LDADD="-lext2fs $qphotorec_LDADD"
+        testdisk_LDADD="-lext2fs $testdisk_LDADD"
       else
-        LIBS="${ext2fs_lib_a} $LIBS"
+	LIBS="${ext2fs_lib_a} $LIBS"
+        photorec_LDADD="${ext2fs_lib_a} $photorec_LDADD"
+        qphotorec_LDADD="${ext2fs_lib_a} $qphotorec_LDADD"
+        testdisk_LDADD="${ext2fs_lib_a} $testdisk_LDADD"
       fi
       have_ext2fs=yes
       ],AC_MSG_WARN(No ext2fs library detected))
   AC_CHECK_FUNCS([ext2fs_get_generic_bitmap_start])
+  LIBS="$ac_save_LIBS"
 else
   AC_MSG_WARN(Use of ext2fs library disabled)
 fi
@@ -656,9 +650,13 @@ if test "x$with_ntfs3g" != "xno"; then
   [
     AC_DEFINE([HAVE_LIBNTFS3G],1,[Define to 1 if you have the ntfs3g library (-lntfs3g).])
     if test "${ntfs3g_lib_a}" = ""; then
-      LIBS="-lntfs-3g $LIBS"
+      photorec_LDADD="-lntfs-3g $photorec_LDADD"
+      qphotorec_LDADD="-lntfs-3g $qphotorec_LDADD"
+      testdisk_LDADD="-lntfs-3g $testdisk_LDADD"
     else
-      LIBS="${ntfs3g_lib_a} $LIBS"
+      photorec_LDADD="${ntfs3g_lib_a} $photorec_LDADD"
+      qphotorec_LDADD="${ntfs3g_lib_a} $qphotorec_LDADD"
+      testdisk_LDADD="${ntfs3g_lib_a} $testdisk_LDADD"
     fi
     have_ntfs3g=yes
     use_ntfs=no
@@ -682,9 +680,13 @@ if test "x$with_ntfs" != "xno"; then
   [
     AC_DEFINE([HAVE_LIBNTFS],1,[Define to 1 if you have the ntfs library (-lntfs).])
     if test "${ntfs_lib_a}" = ""; then
-      LIBS="-lntfs $LIBS"
+      photorec_LDADD="-lntfs $photorec_LDADD"
+      qphotorec_LDADD="-lntfs $qphotorec_LDADD"
+      testdisk_LDADD="-lntfs $testdisk_LDADD"
     else
-      LIBS="${ntfs_lib_a} $LIBS"
+      photorec_LDADD="${ntfs_lib_a} $photorec_LDADD"
+      qphotorec_LDADD="${ntfs_lib_a} $qphotorec_LDADD"
+      testdisk_LDADD="${ntfs_lib_a} $testdisk_LDADD"
     fi
     have_ntfs=yes
   ],
@@ -692,9 +694,13 @@ if test "x$with_ntfs" != "xno"; then
     [
       AC_DEFINE([HAVE_LIBNTFS],1,[Define to 1 if you have the ntfs library (-lntfs).])
       if test "${ntfs_lib_a}" = ""; then
-        LIBS="-lntfs $LIBS"
+	photorec_LDADD="-lntfs $photorec_LDADD"
+	qphotorec_LDADD="-lntfs $qphotorec_LDADD"
+	testdisk_LDADD="-lntfs $testdisk_LDADD"
       else
-        LIBS="${ntfs_lib_a} $LIBS"
+	photorec_LDADD="${ntfs_lib_a} $photorec_LDADD"
+	qphotorec_LDADD="${ntfs_lib_a} $qphotorec_LDADD"
+	testdisk_LDADD="${ntfs_lib_a} $testdisk_LDADD"
       fi
       have_ntfs=yes
     ],AC_MSG_WARN(No ntfs library detected))
@@ -754,23 +760,34 @@ AC_CHECK_HEADERS([sys/uuid.h uuid/uuid.h uuid.h])
 found_uuid_function=yes
 AC_CHECK_FUNCS([uuidgen],,[found_uuid_function=no])
 if test "x$with_uuid" != "xno"; then
-  if test "${found_uuid_function}" = "no";
+  if test "x${found_uuid_function}" != "xyes";
   then
-    found_uuid_function=yes
-    AC_SEARCH_LIBS(uuid_generate, uuid, , [ found_uuid_function=no ])
+    AC_CHECK_LIB(uuid_generate, uuid, [
+      AC_DEFINE([HAVE_LIBUUID],1,[Define to 1 if you have the uuid library (-luuid).])
+      testdisk_LDADD="-luuid $testdisk_LDADD"
+      have_uuid=yes
+      found_uuid_function=yes
+    ])
   fi
-
-  if test "${found_uuid_function}" = "no";
+  if test "x$found_uuid_function" != "xyes";
   then
     found_uuid_function=yes
-    AC_SEARCH_LIBS(uuid_create, uuid, , [found_uuid_function=no])
+    AC_CHECK_LIB(uuid_create, uuid, [
+      AC_DEFINE([HAVE_LIBUUID],1,[Define to 1 if you have the uuid library (-luuid).])
+      testdisk_LDADD="-luuid $testdisk_LDADD"
+      have_uuid=yes
+      found_uuid_function=yes
+    ])
   fi
 fi
 
 if test "${found_uuid_function}" = "yes";
 then
+  OLDLIBS="$LIBS"
+  LIBS="$OLDLIBS $testdisk_LDADD"
   AC_CHECK_FUNCS([uuid_create])
   AC_CHECK_FUNCS([uuid_generate])
+  LIBS="$OLDLIBS"
 fi
 
 if test "${found_uuid_function}" = "no";
@@ -779,7 +796,7 @@ then
   then
     AC_MSG_WARN(No uuid_create or uuid_generate function in library libuuid or uuidgen function present)
   else
-    AC_MSG_ERROR(No uuid_create or uuid_generate function in library libuuid or uuidgen function present)
+    AC_MSG_ERROR(No uuid_create or uuid_generate function in library libuuid or uuidgen function present. Either fix it or use "--enable-missing-uuid-ok")
   fi
 fi
 
@@ -804,11 +821,17 @@ if test "x$with_ewf" != "xno"; then
   AC_CHECK_LIB(ewf,libewf_check_file_signature,[
   AC_DEFINE([HAVE_LIBEWF],1,[Define to 1 if you have the ewf library (-lewf).])
   if test "${ewf_lib_a}" = ""; then
-    LIBS="-lewf $LIBS"
+    photorec_LDADD="-lewf $photorec_LDADD"
+    qphotorec_LDADD="-lewf $qphotorec_LDADD"
+    testdisk_LDADD="-lewf $testdisk_LDADD"
   else
-    LIBS="${ewf_lib_a} $LIBS"
+    photorec_LDADD="${ewf_lib_a} $photorec_LDADD"
+    qphotorec_LDADD="${ewf_lib_a} $qphotorec_LDADD"
+    testdisk_LDADD="${ewf_lib_a} $testdisk_LDADD"
   fi
   have_ewf=yes
+  OLDLIBS="$LIBS"
+  LIBS="$OLDLIBS $photorec_LDADD"
   AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <libewf.h>]],
       [[ libewf_get_bytes_per_sector(NULL,NULL); ]])],
     [ac_cv_c_libewf_get_bytes_per_sector_have_two_arguments=yes],
@@ -830,6 +853,7 @@ if test "x$with_ewf" != "xno"; then
   ],[
   AC_MSG_WARN(No ewf library detected)
   ],[])
+  LIBS="$OLDLIBS"
 else
   AC_MSG_WARN(Use of ewf library disabled)
 fi
@@ -841,7 +865,7 @@ if test "x$have_ewf" != "xyes"; then
   fi
 fi
 #-Wconversion -Wmissing-noreturn -ffunction-sections -Wl,--gc-sections -Wl,--print-gc-sections
-for option in -Wdeclaration-after-statement -Wall -Wextra -MD -Wpointer-arith -Wmissing-declarations -Wmissing-prototypes -Wstrict-prototypes -Wshadow -Wwrite-strings -W -Wcast-align -Waggregate-return -Wbad-function-cast -Wcast-qual -Wundef -Wredundant-decls -Wsign-compare -Wnested-externs -Winline -Wdisabled-optimization -Wfloat-equal -Wmissing-format-attribute -Wmultichar -Wc++-compat -Wformat=2 -Wunreachable-code -Wvla
+for option in -Wdeclaration-after-statement -Wall -Wextra -MD -Wpointer-arith -Wmissing-declarations -Wmissing-prototypes -Wstrict-prototypes -Wshadow -Wwrite-strings -W -Wcast-align -Waggregate-return -Wbad-function-cast -Wcast-qual -Wundef -Wredundant-decls -Wsign-compare -Wnested-externs -Winline -Wdisabled-optimization -Wfloat-equal -Wmissing-format-attribute -Wmultichar -Wc++-compat -Wformat=2 -Wtrampolines -Wunreachable-code -Wvla
 do
   SAVE_CFLAGS="$CFLAGS"
   CFLAGS="$CFLAGS $option"
@@ -856,7 +880,7 @@ done
 unset option
 
 AC_LANG_PUSH([C++])
-for option in -Wall -MD -Wpointer-arith -Wmissing-declarations -Wshadow -Wwrite-strings -W -Wcast-align -Wcast-qual -Wundef -Wredundant-decls -Wsign-compare -Wdisabled-optimization -Wmissing-format-attribute -Wmultichar -Wformat=2 -fvisibility=hidden -fvisibility-inlines-hidden -fPIC -Wvla
+for option in -Wall -MD -Wpointer-arith -Wmissing-declarations -Wshadow -Wwrite-strings -W -Wcast-align -Wcast-qual -Wundef -Wredundant-decls -Wsign-compare -Wdisabled-optimization -Wmissing-format-attribute -Wmultichar -Wformat=2 -fvisibility=hidden -fvisibility-inlines-hidden -fPIC -Wtrampolines -Wvla
 do
   SAVE_CXXFLAGS="$CXXFLAGS"
   CXXFLAGS="$CXXFLAGS $option"

@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_gpx)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -30,6 +31,7 @@
 #include "types.h"
 #include "filegen.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_gpx(file_stat_t *file_stat);
 
 const file_hint_t file_hint_gpx= {
@@ -41,6 +43,13 @@ const file_hint_t file_hint_gpx= {
   .register_header_check=&register_header_check_gpx
 };
 
+/*@
+  @ requires buffer_size >= 16;
+  @ requires separation: \separated(&file_hint_gpx, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_gpx(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   const unsigned char magic[8]={ 0x68, 0x48, 0x68, 0xcd, 0x4c, 0x00, 0x01, 0x80 };
@@ -55,3 +64,4 @@ static void register_header_check_gpx(file_stat_t *file_stat)
 {
   register_header_check(0, "BCFZ", 4, &header_check_gpx, file_stat);
 }
+#endif

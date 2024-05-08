@@ -20,6 +20,7 @@
 
  */
 
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_rar)
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -31,6 +32,7 @@
 #include "filegen.h"
 
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_rar(file_stat_t *file_stat);
 
 const file_hint_t file_hint_rar= {
@@ -44,12 +46,26 @@ const file_hint_t file_hint_rar= {
 
 #define  MHD_PASSWORD       0x0080U
 
+/*@
+  @ requires file_recovery->file_check == &file_check_rar15fmt;
+  @ requires valid_file_check_param(file_recovery);
+  @ ensures  valid_file_check_result(file_recovery);
+  @ assigns *file_recovery->handle, errno, file_recovery->file_size;
+  @ assigns Frama_C_entropy_source;
+  @*/
 static void file_check_rar15fmt(file_recovery_t *file_recovery)
 {
   static const unsigned char rar15fmt_footer[7]={0xc4, 0x3d, 0x7b, 0x00, 0x40, 0x07, 0x00 };
   file_search_footer(file_recovery, rar15fmt_footer, sizeof(rar15fmt_footer), 0);
 }
 
+/*@
+  @ requires buffer_size >= 0xb;
+  @ requires separation: \separated(&file_hint_rar, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_rar15fmt(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   reset_file_recovery(file_recovery_new);
@@ -60,12 +76,26 @@ static int header_check_rar15fmt(const unsigned char *buffer, const unsigned int
   return 1;
 }
 
+/*@
+  @ requires file_recovery->file_check == &file_check_rar50fmt;
+  @ requires valid_file_check_param(file_recovery);
+  @ ensures  valid_file_check_result(file_recovery);
+  @ assigns *file_recovery->handle, errno, file_recovery->file_size;
+  @ assigns Frama_C_entropy_source;
+  @*/
 static void file_check_rar50fmt(file_recovery_t *file_recovery)
 {
   static const unsigned char rar50fmt_footer[8]={0x1d, 0x77, 0x56, 0x51, 0x03, 0x05, 0x04, 0x00 };
   file_search_footer(file_recovery, rar50fmt_footer, sizeof(rar50fmt_footer), 0);
 }
 
+/*@
+  @ requires buffer_size >= 0xb;
+  @ requires separation: \separated(&file_hint_rar, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_rar50fmt(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   reset_file_recovery(file_recovery_new);
@@ -83,3 +113,4 @@ static void register_header_check_rar(file_stat_t *file_stat)
   register_header_check(0, rar15fmt_header,sizeof(rar15fmt_header), &header_check_rar15fmt, file_stat);
   register_header_check(0, rar50fmt_header,sizeof(rar50fmt_header), &header_check_rar50fmt, file_stat);
 }
+#endif

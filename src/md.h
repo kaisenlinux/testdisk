@@ -242,7 +242,9 @@ struct mdp_superblock_1 {
 	 * into the 'roles' value.  If a device is spare or faulty, then it doesn't
 	 * have a meaningful role.
 	 */
+#if !defined(__FRAMAC__)
 	uint16_t	dev_roles[0];	/* role in array, or 0xffff for a spare, or 0xfffe for faulty */
+#endif
 };
 
 #if 0
@@ -253,8 +255,29 @@ static inline uint64_t md_event(mdp_super_t *sb) {
 #endif
 
 /* TestDisk */
-int check_MD(disk_t *disk_car,partition_t *partition,const int verbose);
-int recover_MD(disk_t *disk_car, const struct mdp_superblock_s *sb, partition_t *partition, const int verbose, const int dump_ind);
+/*@
+  @ requires \valid(disk_car);
+  @ requires valid_disk(disk_car);
+  @ requires \valid(partition);
+  @ requires separation: \separated(disk_car, partition);
+  @*/
+int check_MD(disk_t *disk_car, partition_t *partition, const int verbose);
+
+/*@
+  @ requires \valid_read(disk_car);
+  @ requires valid_disk(disk_car);
+  @ requires \valid_read(sb);
+  @ requires \valid(partition);
+  @ requires separation: \separated(disk_car, sb, partition);
+  @*/
+int recover_MD(const disk_t *disk_car, const struct mdp_superblock_s *sb, partition_t *partition, const int verbose, const int dump_ind);
+
+/*@
+  @ requires \valid(disk_car);
+  @ requires valid_disk(disk_car);
+  @ requires \valid(partition);
+  @ requires separation: \separated(disk_car, partition);
+  @*/
 int recover_MD_from_partition(disk_t *disk_car, partition_t *partition, const int verbose);
 
 #ifdef __cplusplus

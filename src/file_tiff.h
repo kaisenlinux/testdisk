@@ -19,9 +19,13 @@
     Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
  */
+#ifndef _FILE_TIFF_H
+#define _FILE_TIFF_H
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define TIFF_ERROR 0xffffffffffffffffull
 
 #define TIFF_BIGENDIAN          	0x4d4d
 #define TIFF_LITTLEENDIAN       	0x4949
@@ -66,21 +70,100 @@ struct ifd_header {
   TIFFDirEntry ifd;
 } __attribute__ ((gcc_struct, __packed__));
 
-time_t get_date_from_tiff_header(const TIFFHeader *tiff, const unsigned int tiff_size);
-const char *find_tag_from_tiff_header(const TIFFHeader *tiff, const unsigned int tiff_size, const unsigned int tag, const char **potential_error);
-void file_check_tiff(file_recovery_t *file_recovery);
+/*@
+  @ requires \valid_read(buffer+(0..buffer_size-1));
+  @ ensures \valid_read(buffer+(0..buffer_size-1));
+  @ assigns \nothing;
+  @*/
+time_t get_date_from_tiff_header(const unsigned char*buffer, const unsigned int buffer_size);
 
-const char *find_tag_from_tiff_header_be(const TIFFHeader *tiff, const unsigned int tiff_size, const unsigned int tag, const char**potential_error);
-const char *find_tag_from_tiff_header_le(const TIFFHeader *tiff, const unsigned int tiff_size, const unsigned int tag, const char**potential_error);
-uint64_t header_check_tiff_be(file_recovery_t *fr, const uint32_t tiff_diroff, const unsigned int depth, const unsigned int count);
-uint64_t header_check_tiff_le(file_recovery_t *fr, const uint32_t tiff_diroff, const unsigned int depth, const unsigned int count);
-int header_check_tiff_be_new(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
-int header_check_tiff_le_new(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
+/*@
+  @ requires \valid_read(buffer+(0..buffer_size-1));
+  @ requires \separated(potential_error, buffer);
+  @ assigns *potential_error;
+  @*/
+unsigned int find_tag_from_tiff_header(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int tag, const unsigned char **potential_error);
+
+#if !defined(MAIN_tiff_be)
+/*@
+  @ requires tiff_size >= sizeof(TIFFHeader);
+  @ requires tiff_size >= sizeof(struct ifd_header);
+  @ requires \valid_read(buffer+(0..tiff_size-1));
+  @ requires \valid(potential_error);
+  @ requires \separated(potential_error, buffer);
+  @ terminates \true;
+  @ assigns *potential_error;
+  @*/
+unsigned int find_tag_from_tiff_header_le(const unsigned char *buffer, const unsigned int tiff_size, const unsigned int tag, const unsigned char**potential_error);
+#endif
+
+#if !defined(MAIN_tiff_be) && !defined(MAIN_jpg) && !defined(SINGLE_FORMAT_jpg)
+/*@
+  @ requires fr->file_check==&file_check_tiff_le;
+  @ requires valid_file_check_param(fr);
+  @ ensures  valid_file_check_result(fr);
+  @ assigns  errno;
+  @ assigns  fr->file_size;
+  @ assigns  *fr->handle;
+  @ assigns  Frama_C_entropy_source;
+  @*/
+void file_check_tiff_le(file_recovery_t *fr);
+#endif
+
+#if !defined(MAIN_tiff_be) && !defined(MAIN_jpg) && !defined(SINGLE_FORMAT_jpg) && !defined(SINGLE_FORMAT_rw2) && !defined(SINGLE_FORMAT_orf) && !defined(SINGLE_FORMAT_wdp)
+/*@
+  @ requires buffer_size >= 18;
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ ensures (\result == 1) ==> (file_recovery_new->file_size == 0);
+  @ ensures (\result == 1) ==> (file_recovery_new->extension != \null);
+  @ ensures (\result == 1) ==>  valid_read_string(file_recovery_new->extension);
+  @ ensures (\result == 1) ==> (file_recovery_new->calculated_file_size == 0);
+  @ ensures (\result == 1) ==> (file_recovery_new->data_check == \null);
+  @ ensures (\result == 1) ==> (file_recovery_new->file_check == &file_check_tiff_le);
+  @ ensures (\result == 1) ==> (file_recovery_new->file_rename== \null);
+  @*/
+int header_check_tiff_le(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
+#endif
+
+#if !defined(MAIN_tiff_le)
+/*@
+  @ requires tiff_size >= sizeof(TIFFHeader);
+  @ requires tiff_size >= sizeof(struct ifd_header);
+  @ requires \valid_read(buffer+(0..tiff_size-1));
+  @ requires \valid(potential_error);
+  @ requires \separated(potential_error, buffer);
+  @ assigns *potential_error;
+  @*/
+unsigned int find_tag_from_tiff_header_be(const unsigned char*buffer, const unsigned int tiff_size, const unsigned int tag, const unsigned char**potential_error);
+#endif
+
+#if !defined(MAIN_tiff_le) && !defined(MAIN_jpg) && !defined(SINGLE_FORMAT_jpg) && !defined(SINGLE_FORMAT_rw2) && !defined(SINGLE_FORMAT_orf) && !defined(SINGLE_FORMAT_wdp)
+/*@
+  @ requires buffer_size >= 20;
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ ensures (\result == 1) ==> (file_recovery_new->file_size == 0);
+  @ ensures (\result == 1) ==> (file_recovery_new->extension != \null);
+  @ ensures (\result == 1) ==>  valid_read_string(file_recovery_new->extension);
+  @ ensures (\result == 1) ==> (file_recovery_new->calculated_file_size == 0);
+  @ ensures (\result == 1) ==> (file_recovery_new->data_check == \null);
+  @ ensures (\result == 1) ==> (file_recovery_new->file_rename== \null);
+  @*/
+int header_check_tiff_be(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new);
+#endif
+
+/*@
+  @ ensures \result == 1 || \result == 2 || \result == 4 || \result == 8;
+  @ assigns \nothing;
+  @*/
 unsigned int tiff_type2size(const unsigned int type);
+
 #ifdef DEBUG_TIFF
 const char *tag_name(unsigned int tag);
 #endif
 
 #ifdef __cplusplus
 } /* closing brace for extern "C" */
+#endif
 #endif

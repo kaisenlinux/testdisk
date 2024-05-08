@@ -23,21 +23,31 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
+
+#if defined(DISABLED_FOR_FRAMAC)
+#undef HAVE_LIBZ
+#undef HAVE_ZLIB_H
+#endif
+
 #ifdef HAVE_STRING_H
 #include <string.h>
 #endif
 #include <stdio.h>
 #include "types.h"
+#include "file_gz.h"
+
 #ifdef HAVE_ZLIB_H
 #include <zlib.h>
 #endif
+#if !defined(SINGLE_FORMAT) || defined(SINGLE_FORMAT_gz)
 #include "filegen.h"
 #include "common.h"
-#include "file_gz.h"
 
+/*@ requires valid_register_header_check(file_stat); */
 static void register_header_check_gz(file_stat_t *file_stat);
-static void file_rename_gz(file_recovery_t *file_recovery);
+#ifndef SINGLE_FORMAT
 extern const file_hint_t file_hint_doc;
+#endif
 
 const file_hint_t file_hint_gz= {
   .extension="gz",
@@ -74,10 +84,60 @@ struct gzip_header
 #define GZ_FNAME	8
 #define GZ_FCOMMENT     0x10
 
+/*@
+  @ requires file_recovery->file_rename==&file_rename_gz;
+  @ requires valid_file_rename_param(file_recovery);
+  @ ensures  valid_file_rename_result(file_recovery);
+  @*/
+static void file_rename_gz(file_recovery_t *file_recovery)
+{
+  unsigned char buffer[512];
+  FILE *file;
+  int buffer_size;
+  if((file=fopen(file_recovery->filename, "rb"))==NULL)
+    return;
+  buffer_size=fread(buffer, 1, sizeof(buffer), file);
+  fclose(file);
+  if(buffer_size<10)
+    return;
+  /*@ assert \initialized(buffer+(0..10)); */
+  if(!(buffer[0]==0x1F && buffer[1]==0x8B && buffer[2]==0x08 && (buffer[3]&0xe0)==0))
+    return ;
+  {
+    const unsigned int flags=buffer[3];
+    int off=10;
+    if((flags&GZ_FEXTRA)!=0)
+    {
+      if(buffer_size<12)
+	return;
+      /*@ assert \initialized(buffer + (0 .. 12)); */
+      off+=2;
+      off+=buffer[10]|(buffer[11]<<8);
+    }
+    if((flags&GZ_FNAME)!=0)
+    {
+      file_rename(file_recovery, buffer, buffer_size, off, NULL, 1);
+    }
+  }
+}
+
+#if defined(HAVE_ZLIB_H) && defined(HAVE_LIBZ)
+/*@ assigns \nothing; */
 static void file_check_bgzf(file_recovery_t *file_recovery)
 {
 }
 
+/*@
+  @ requires buffer_size >= sizeof(struct gzip_header);
+  @ requires \valid_read(buffer+(0..buffer_size-1));
+  @ requires \valid_read(buffer_uncompr + (0 .. 4-1));
+  @ requires \valid(file_recovery_new);
+  @ requires separation: \separated(buffer+(..), file_recovery_new);
+  @ requires valid_file_recovery(file_recovery_new);
+  @ ensures  \result == 1;
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @ assigns  *file_recovery_new;
+  @*/
 static int header_check_bgzf(const unsigned char *buffer, const unsigned char *buffer_uncompr, const unsigned int buffer_size, file_recovery_t *file_recovery_new)
 {
   const struct gzip_header *gz=(const struct gzip_header *)buffer;
@@ -90,24 +150,35 @@ static int header_check_bgzf(const unsigned char *buffer, const unsigned char *b
   {
     /* https://github.com/samtools/hts-specs SAM/BAM and related high-throughput sequencing file formats */
     file_recovery_new->extension="bai";
+    /*@ assert valid_file_recovery(file_recovery_new); */
     return 1;
   }
   if(memcmp(buffer_uncompr, "BAM\1", 4)==0)
   {
     /* https://github.com/samtools/hts-specs SAM/BAM and related high-throughput sequencing file formats */
     file_recovery_new->extension="bam";
+    /*@ assert valid_file_recovery(file_recovery_new); */
     return 1;
   }
   if(memcmp(buffer_uncompr, "CSI\1", 4)==0)
   {
     /* https://github.com/samtools/hts-specs SAM/BAM and related high-throughput sequencing file formats */
     file_recovery_new->extension="csi";
+    /*@ assert valid_file_recovery(file_recovery_new); */
     return 1;
   }
   file_recovery_new->extension="bgz";
+  /*@ assert valid_file_recovery(file_recovery_new); */
   return 1;
 }
+#endif
 
+/*@
+  @ requires buffer_size >= 16;
+  @ requires separation: \separated(&file_hint_gz, buffer+(..), file_recovery, file_recovery_new);
+  @ requires valid_header_check_param(buffer, buffer_size, safe_header_only, file_recovery, file_recovery_new);
+  @ ensures  valid_header_check_result(\result, file_recovery_new);
+  @*/
 static int header_check_gz(const unsigned char *buffer, const unsigned int buffer_size, const unsigned int safe_header_only, const file_recovery_t *file_recovery, file_recovery_t *file_recovery_new)
 {
   unsigned int off=10;
@@ -157,26 +228,20 @@ static int header_check_gz(const unsigned char *buffer, const unsigned int buffe
   }
   if(off >= 512 || off >= buffer_size)
     return 0;
-  if(file_recovery->file_stat!=NULL &&
-      file_recovery->file_stat->file_hint==&file_hint_doc)
-  {
-    if(header_ignored_adv(file_recovery, file_recovery_new)==0)
-      return 0;
-  }
-  if(file_recovery->file_check==&file_check_bgzf)
-  {
-    header_ignored(file_recovery_new);
-    return 0;
-  }
+  /*@ assert off < 512; */
+  /*@ assert off < buffer_size ; */
 #if defined(HAVE_ZLIB_H) && defined(HAVE_LIBZ)
   {
     static const unsigned char schematic_header[12]={ 0x0a, 0x00, 0x09,
       'S', 'c', 'h', 'e', 'm', 'a', 't', 'i', 'c'};
     static const unsigned char tar_header_posix[8]  = { 'u','s','t','a','r',' ',' ',0x00};
     const unsigned char *buffer_compr=buffer+off;
-    unsigned char buffer_uncompr[512];
-    const unsigned int comprLen=(buffer_size<512?buffer_size:512)-off;
-    const unsigned int uncomprLen=512-1;
+    unsigned char buffer_uncompr[4096];
+    const unsigned int uncomprLen=sizeof(buffer_uncompr)-1;
+    const unsigned int bs=td_max(512U,file_recovery_new->blocksize);
+    /*@ assert bs >=512; */
+    const unsigned int comprLen=td_min(buffer_size,bs)-off;
+    /*@ assert comprLen > 0; */
     int err;
     z_stream d_stream; /* decompression stream */
     d_stream.zalloc = (alloc_func)0;
@@ -207,6 +272,20 @@ static int header_check_gz(const unsigned char *buffer, const unsigned int buffe
     /* Probably too small to be a file */
     if(d_stream.total_out < 16)
       return 0;
+#ifndef SINGLE_FORMAT
+    if(file_recovery->file_stat!=NULL &&
+	file_recovery->file_stat->file_hint==&file_hint_doc)
+    {
+      if(header_ignored_adv(file_recovery, file_recovery_new)==0)
+	return 0;
+    }
+#endif
+    if(file_recovery->file_check==&file_check_bgzf)
+    {
+      /*@ assert \valid_function(file_recovery->file_check); */
+      header_ignored(file_recovery_new);
+      return 0;
+    }
     buffer_uncompr[d_stream.total_out]='\0';
     if(bgzf!=0)
     {
@@ -216,6 +295,15 @@ static int header_check_gz(const unsigned char *buffer, const unsigned int buffe
     file_recovery_new->min_filesize=22;
     file_recovery_new->time=le32(gz->mtime);
     file_recovery_new->file_rename=&file_rename_gz;
+    if(d_stream.avail_in==0 && d_stream.total_in < comprLen && d_stream.total_out < uncomprLen)
+    {
+      /* an 8-byte footer, containing a CRC-32 checksum and
+       * the length of the original uncompressed data, modulo 2^32
+       */
+      file_recovery_new->calculated_file_size=off+d_stream.total_in+8;
+      file_recovery_new->data_check=&data_check_size;
+      file_recovery_new->file_check=&file_check_size;
+    }
     if(memcmp(buffer_uncompr, "PVP ", 4)==0)
     {
       /* php Video Pro */
@@ -297,6 +385,14 @@ static int header_check_gz(const unsigned char *buffer, const unsigned int buffe
     }
   }
 #else
+#ifndef SINGLE_FORMAT
+  if(file_recovery->file_stat!=NULL &&
+      file_recovery->file_stat->file_hint==&file_hint_doc)
+  {
+    if(header_ignored_adv(file_recovery, file_recovery_new)==0)
+      return 0;
+  }
+#endif
   reset_file_recovery(file_recovery_new);
   file_recovery_new->min_filesize=22;
   file_recovery_new->time=le32(gz->mtime);
@@ -306,33 +402,12 @@ static int header_check_gz(const unsigned char *buffer, const unsigned int buffe
   return 1;
 }
 
-static void file_rename_gz(file_recovery_t *file_recovery)
+static void register_header_check_gz(file_stat_t *file_stat)
 {
-  unsigned char buffer[512];
-  FILE *file;
-  int buffer_size;
-  if((file=fopen(file_recovery->filename, "rb"))==NULL)
-    return;
-  buffer_size=fread(buffer, 1, sizeof(buffer), file);
-  fclose(file);
-  if(buffer_size<10)
-    return;
-  if(!(buffer[0]==0x1F && buffer[1]==0x8B && buffer[2]==0x08 && (buffer[3]&0xe0)==0))
-    return ;
-  {
-    const unsigned int flags=buffer[3];
-    int off=10;
-    if((flags&GZ_FEXTRA)!=0)
-    {
-      off+=2;
-      off+=buffer[10]|(buffer[11]<<8);
-    }
-    if((flags&GZ_FNAME)!=0)
-    {
-      file_rename(file_recovery, buffer, buffer_size, off, NULL, 1);
-    }
-  }
+  static const unsigned char gz_header_magic[3]= {0x1F, 0x8B, 0x08};
+  register_header_check(0, gz_header_magic,sizeof(gz_header_magic), &header_check_gz, file_stat);
 }
+#endif
 
 const char*td_zlib_version(void)
 {
@@ -341,10 +416,4 @@ const char*td_zlib_version(void)
 #else
   return "none";
 #endif
-}
-
-static void register_header_check_gz(file_stat_t *file_stat)
-{
-  static const unsigned char gz_header_magic[3]= {0x1F, 0x8B, 0x08};
-  register_header_check(0, gz_header_magic,sizeof(gz_header_magic), &header_check_gz, file_stat);
 }
